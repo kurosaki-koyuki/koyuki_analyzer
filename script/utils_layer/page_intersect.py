@@ -102,6 +102,16 @@ class PageIntersect:
                     'sync_method': 'sync_data_from_bulk_main'
                 },
                 {
+                    'name': 'bulk_cluster_page',
+                    'ui_class': 'BulkClusterPageUI',
+                    'ui_module': 'script.analyzer_layer.bulk_layer.bulk_cluster_layer.ui_layout_bulk_cluster',
+                    'bind_class': 'BulkClusterBind',
+                    'bind_module': 'script.analyzer_layer.bulk_layer.bulk_cluster_layer.ui_bind_bulk_cluster',
+                    'attr_name': 'bulk_cluster_page',
+                    'data_source_page': 'bulk_top_page',
+                    'sync_method': 'sync_data_from_bulk_main'
+                },
+                {
                     'name': 'bulk_corre_page',
                     'ui_class': 'BulkCorrePageUI',
                     'ui_module': 'script.analyzer_layer.bulk_layer.bulk_corre_layer.ui_layout_bulk_corre',
@@ -164,6 +174,16 @@ class PageIntersect:
                     'sync_method': 'sync_data_from_bulk_main'
                 },
                 {
+                    'name': 'bulk_immune_estimate_page',
+                    'ui_class': 'BulkImmuneEstimatePageUI',
+                    'ui_module': 'script.analyzer_layer.bulk_layer.immune_top_layer.bulk_immune_estimate_layer.ui_layout_bulk_immune_estimate',
+                    'bind_class': 'BulkImmuneEstimateBind',
+                    'bind_module': 'script.analyzer_layer.bulk_layer.immune_top_layer.bulk_immune_estimate_layer.ui_bind_bulk_immune_estimate',
+                    'attr_name': 'bulk_immune_estimate_page',
+                    'data_source_page': 'bulk_top_page',
+                    'sync_method': 'sync_data_from_bulk_main'
+                },
+                {
                     'name': 'venn_page',
                     'ui_class': 'VennPlotPageUI',
                     'ui_module': 'script.analyzer_layer.commontools_layer.vennplot_layer.ui_layout_vennplot',
@@ -195,7 +215,10 @@ class PageIntersect:
         return self.pages.get(page_name)
     
     def go_to_home(self):
-        return self.go_to_page_with_bind('home_page')
+        result = self.go_to_page_with_bind('home_page')
+        if hasattr(self, 'main_window') and hasattr(self.main_window, 'video_bg'):
+            self.main_window.video_bg.play_return()
+        return result
     
     def init_all_pages(self, main_window, stacked_widget):
         """

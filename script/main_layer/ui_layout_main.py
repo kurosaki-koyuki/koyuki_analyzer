@@ -101,7 +101,7 @@ class MainWindowUI(QMainWindow):
         fill_color = styles.get('main_fill_color', 'rgba(30, 58, 95, 0.3)')
         fill_alt = styles.get('main_fill_alt', 'rgba(30, 58, 95, 0.5)')
         gui_font = styles.get('main_gui_font', '幼圆')
-        text_font = styles.get('main_text_font', '微软雅黑')
+        text_font = styles.get('main_text_font', '幼圆')
         combo_radius = '3px'
         button_radius = '5px'
         
@@ -280,7 +280,7 @@ class MainWindowUI(QMainWindow):
         self.btn_venn.move(tools_start_x, btn_start_y)
         
         self.btn_donate = QPushButton("打赏作者", self.home_page)
-        self.btn_donate.setFont(QFont(styles.get('label_font', "微软雅黑"), 14, QFont.Bold))
+        self.btn_donate.setFont(QFont(styles.get('label_font', "幼圆"), 14, QFont.Bold))
         donate_color = styles.get('main_mutant_color', styles.get('mutant_color', '#FF6B35'))
         btn_radius = styles.get('button_border_radius', '5px')
         self.btn_donate.setStyleSheet(f"""

@@ -94,6 +94,9 @@ def get_all_music_buttons(main_window):
     """
     获取主窗口中的所有音乐按钮（包括主界面直接创建的和子界面music_controller中的）
 
+    自动扫描 main_window 上所有以 '_ui' 结尾的实例属性，检测其 music_controller。
+    新增子页面时无需修改本函数，只要 UI 层创建了 music_controller 即可被自动收集。
+
     Args:
         main_window: 主窗口实例
 
@@ -106,37 +109,18 @@ def get_all_music_buttons(main_window):
     if hasattr(main_window, 'music_btn') and main_window.music_btn:
         buttons.append(main_window.music_btn)
 
-    # 小提琴图界面的音乐按钮 - music_controller在violin_ui中
-    if hasattr(main_window, 'violin_ui'):
-        violin_ui = main_window.violin_ui
-        if hasattr(violin_ui, 'music_controller') and violin_ui.music_controller:
-            button = violin_ui.music_controller.get_music_button()
-            if button:
-                buttons.append(button)
-
-    # 初步分析界面的音乐按钮 - music_controller在analysis_ui中
-    if hasattr(main_window, 'analysis_ui'):
-        analysis_ui = main_window.analysis_ui
-        if hasattr(analysis_ui, 'music_controller') and analysis_ui.music_controller:
-            button = analysis_ui.music_controller.get_music_button()
-            if button:
-                buttons.append(button)
-
-    # 差异分析界面的音乐按钮 - music_controller在diff_ui中
-    if hasattr(main_window, 'diff_ui'):
-        diff_ui = main_window.diff_ui
-        if hasattr(diff_ui, 'music_controller') and diff_ui.music_controller:
-            button = diff_ui.music_controller.get_music_button()
-            if button:
-                buttons.append(button)
-
-    # bulk表达量分析界面的音乐按钮 - music_controller在bulk_ui中
-    if hasattr(main_window, 'bulk_ui'):
-        bulk_ui = main_window.bulk_ui
-        if hasattr(bulk_ui, 'music_controller') and bulk_ui.music_controller:
-            button = bulk_ui.music_controller.get_music_button()
-            if button:
-                buttons.append(button)
+    # 自动扫描所有 *_ui 实例属性中的 music_controller
+    for attr_name, ui in vars(main_window).items():
+        if not attr_name.endswith('_ui'):
+            continue
+        if ui is None:
+            continue
+        mc = getattr(ui, 'music_controller', None)
+        if mc is None:
+            continue
+        button = mc.get_music_button()
+        if button:
+            buttons.append(button)
 
     return buttons
 
@@ -200,62 +184,34 @@ def validate_music_controller_state(music_controller):
 def get_all_volume_sliders(main_window):
     """
     获取主窗口中的所有音量滑块（包括主界面直接创建的和子界面music_controller中的）
-    
+
+    自动扫描 main_window 上所有以 '_ui' 结尾的实例属性，检测其 music_controller。
+    新增子页面时无需修改本函数，只要 UI 层创建了 music_controller 即可被自动收集。
+
     Args:
         main_window: 主窗口实例
-        
+
     Returns:
         list: 所有音量滑块的列表
     """
     sliders = []
-    
+
     # 主界面直接创建的volume_slider（不通过music_controller）
     if hasattr(main_window, 'volume_slider') and main_window.volume_slider:
         sliders.append(main_window.volume_slider)
-    
-    # 小提琴图界面的音量滑块 - music_controller在violin_ui中
-    if hasattr(main_window, 'violin_ui'):
-        violin_ui = main_window.violin_ui
-        if hasattr(violin_ui, 'music_controller') and violin_ui.music_controller:
-            slider = violin_ui.music_controller.get_volume_slider()
-            if slider:
-                sliders.append(slider)
-        # 也检查直接的volume_slider（备用）
-        elif hasattr(violin_ui, 'volume_slider') and violin_ui.volume_slider:
-            sliders.append(violin_ui.volume_slider)
-    
-    # 初步分析界面的音量滑块 - music_controller在analysis_ui中
-    if hasattr(main_window, 'analysis_ui'):
-        analysis_ui = main_window.analysis_ui
-        if hasattr(analysis_ui, 'music_controller') and analysis_ui.music_controller:
-            slider = analysis_ui.music_controller.get_volume_slider()
-            if slider:
-                sliders.append(slider)
-        # 也检查直接的volume_slider（备用）
-        elif hasattr(analysis_ui, 'volume_slider') and analysis_ui.volume_slider:
-            sliders.append(analysis_ui.volume_slider)
 
-    # 差异分析界面的音量滑块 - music_controller在diff_ui中
-    if hasattr(main_window, 'diff_ui'):
-        diff_ui = main_window.diff_ui
-        if hasattr(diff_ui, 'music_controller') and diff_ui.music_controller:
-            slider = diff_ui.music_controller.get_volume_slider()
-            if slider:
-                sliders.append(slider)
-        # 也检查直接的volume_slider（备用）
-        elif hasattr(diff_ui, 'volume_slider') and diff_ui.volume_slider:
-            sliders.append(diff_ui.volume_slider)
-
-    # bulk表达量分析界面的音量滑块 - music_controller在bulk_ui中
-    if hasattr(main_window, 'bulk_ui'):
-        bulk_ui = main_window.bulk_ui
-        if hasattr(bulk_ui, 'music_controller') and bulk_ui.music_controller:
-            slider = bulk_ui.music_controller.get_volume_slider()
-            if slider:
-                sliders.append(slider)
-        # 也检查直接的volume_slider（备用）
-        elif hasattr(bulk_ui, 'volume_slider') and bulk_ui.volume_slider:
-            sliders.append(bulk_ui.volume_slider)
+    # 自动扫描所有 *_ui 实例属性中的 music_controller
+    for attr_name, ui in vars(main_window).items():
+        if not attr_name.endswith('_ui'):
+            continue
+        if ui is None:
+            continue
+        mc = getattr(ui, 'music_controller', None)
+        if mc is None:
+            continue
+        slider = mc.get_volume_slider()
+        if slider:
+            sliders.append(slider)
 
     return sliders
 
@@ -263,33 +219,31 @@ def get_all_volume_sliders(main_window):
 def get_all_music_controllers(main_window):
     """
     获取主窗口中的所有音乐控制器
-    
+
+    自动扫描 main_window 上所有以 '_ui' 结尾的实例属性，检测其 music_controller。
+    新增子页面时无需修改本函数，只要 UI 层创建了 music_controller 即可被自动收集。
+
     Args:
         main_window: 主窗口实例
-        
+
     Returns:
         list: 所有音乐控制器的列表
     """
     controllers = []
-    
+
     # 检查主界面的音乐控制器
     if hasattr(main_window, 'music_controller') and main_window.music_controller:
         controllers.append(main_window.music_controller)
-    
-    # 检查小提琴图界面的音乐控制器
-    if hasattr(main_window, 'violin_bind') and hasattr(main_window.violin_bind, 'violin_ui'):
-        if hasattr(main_window.violin_bind.violin_ui, 'music_controller') and main_window.violin_bind.violin_ui.music_controller:
-            controllers.append(main_window.violin_bind.violin_ui.music_controller)
-    
-    # 检查初步分析界面的音乐控制器
-    if hasattr(main_window, 'analysis_bind') and hasattr(main_window.analysis_bind, 'analysis_ui'):
-        if hasattr(main_window.analysis_bind.analysis_ui, 'music_controller') and main_window.analysis_bind.analysis_ui.music_controller:
-            controllers.append(main_window.analysis_bind.analysis_ui.music_controller)
 
-    # 检查差异分析界面的音乐控制器
-    if hasattr(main_window, 'diff_bind') and hasattr(main_window.diff_bind, 'diff_ui'):
-        if hasattr(main_window.diff_bind.diff_ui, 'music_controller') and main_window.diff_bind.diff_ui.music_controller:
-            controllers.append(main_window.diff_bind.diff_ui.music_controller)
+    # 自动扫描所有 *_ui 实例属性中的 music_controller
+    for attr_name, ui in vars(main_window).items():
+        if not attr_name.endswith('_ui'):
+            continue
+        if ui is None:
+            continue
+        mc = getattr(ui, 'music_controller', None)
+        if mc is not None:
+            controllers.append(mc)
 
     return controllers
 

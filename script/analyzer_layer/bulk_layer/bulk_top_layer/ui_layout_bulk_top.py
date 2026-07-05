@@ -140,7 +140,7 @@ class BulkTopPageUI:
         
         left_panel, left_layout = create_styled_panel(fixed_width=220)
         
-        subtitle_font = styles.get('sub_text_font', '微软雅黑')
+        subtitle_font = styles.get('sub_text_font', '幼圆')
         subtitle_font_size = styles.get('subtitle_font_size', 14)
         subtitle_color = styles.get('sub_text_color', '#87CEEB')
         
@@ -219,8 +219,12 @@ class BulkTopPageUI:
         col4_layout.setSpacing(5)
         self.btn_km = create_styled_button("生存分析", font_size=btn_font_size, parent=col4)
         col4_layout.addWidget(self.btn_km, alignment=Qt.AlignCenter)
+        self.btn_cluster = create_styled_button("一致性分析", font_size=btn_font_size, parent=col4)
+        col4_layout.addWidget(self.btn_cluster, alignment=Qt.AlignCenter)
         self.btn_wgcna = create_styled_button("WGCNA分析", font_size=btn_font_size, parent=col4)
         col4_layout.addWidget(self.btn_wgcna, alignment=Qt.AlignCenter)
+        self.btn_immune = create_styled_button("bulk免疫分析", font_size=btn_font_size, parent=col4)
+        col4_layout.addWidget(self.btn_immune, alignment=Qt.AlignCenter)
         columns_layout.addWidget(col4)
         
         analysis_layout.addLayout(columns_layout)

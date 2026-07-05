@@ -50,12 +50,11 @@ class MainFunc:
         self.main_ui.setWindowTitle(title)
 
     def _update_title_label(self, styles, primary_color, title_font):
-        """更新主标题标签"""
+        """更新主标题标签（字体固定不随mod变化，只更新文字/颜色/位置）"""
         if not hasattr(self.main_ui, 'title_label'):
             return
         label = self.main_ui.title_label
         label.setText(styles.get('main_title', "生信工具一览"))
-        label.setFont(QFont(title_font, styles.get('title_font_size', 20), QFont.Bold))
         label.setStyleSheet(f"color: {primary_color}; background: transparent;")
         label.setGeometry(
             int(self.main_ui.screen_width * styles.get('title_x', 0.65)),
@@ -65,13 +64,9 @@ class MainFunc:
         )
 
     def _update_subtitle_labels(self, styles, label_font, primary_color):
-        """更新副标题标签"""
-        subtitle_font = styles.get('subtitle_font', label_font)
-        subtitle_font_size = styles.get('subtitle_font_size', 14)
+        """更新副标题标签（字体固定不随mod变化，只更新文字/颜色/位置）"""
         subtitle_color = styles.get('subtitle_color', primary_color)
         subtitle_background = styles.get('subtitle_background', 'transparent')
-        subtitle_bold = styles.get('subtitle_bold', True)
-        weight = QFont.Bold if subtitle_bold else QFont.Normal
 
         subtitle_configs = [
             ('left_title_label', 'single_cell_title', "单细胞分析",
@@ -87,7 +82,6 @@ class MainFunc:
                 continue
             label = getattr(self.main_ui, attr)
             label.setText(styles.get(text_key, default_text))
-            label.setFont(QFont(subtitle_font, subtitle_font_size, weight))
             label.setStyleSheet(f"color: {subtitle_color}; background: {subtitle_background};")
             label.setGeometry(
                 int(self.main_ui.screen_width * styles.get(x_key, 0.68 if 'left' in attr else 0.78 if 'right' in attr else 0.88)),
@@ -115,20 +109,17 @@ class MainFunc:
             self.main_ui.volume_slider.setStyleSheet(slider_stylesheet)
 
     def _update_all_buttons(self, styles, button_font, button_stylesheet):
-        """批量更新所有功能按钮的样式（位置更新委托给layout层）"""
-        btn_font = QFont(button_font, styles.get('button_font_size', 16), QFont.Bold)
-        
+        """批量更新所有功能按钮的样式（字体固定不随mod变化，只更新颜色/位置）"""
         buttons = [
             'btn_single_cell_main', 'btn_bulk_main', 'btn_venn'
         ]
-        
+
         for btn_name in buttons:
             if not hasattr(self.main_ui, btn_name):
                 continue
             btn = getattr(self.main_ui, btn_name)
-            btn.setFont(btn_font)
             btn.setStyleSheet(button_stylesheet)
-        
+
         if hasattr(self.main_ui, 'update_button_positions'):
             self.main_ui.update_button_positions(styles)
 
@@ -188,13 +179,7 @@ class MainFunc:
     # ---------- 通用弹窗 ----------
 
     def show_donate_message(self):
-        """显示打赏信息弹窗"""
-        donate_message = """
-        感谢您使用小雪生信工具箱！
-        
-        如果您觉得这个工具对您有帮助，
-        可以考虑打赏作者以支持后续开发。
-        
-        您的每一份支持都是对开发者最大的鼓励！
-        """
-        happy(self.main_ui, donate_message)
+        """显示打赏弹窗（V50图片 + 强制播放V50音乐）"""
+        from script.main_layer.donate_dialog import DonateDialog
+        dialog = DonateDialog(self.main_ui)
+        dialog.exec_()

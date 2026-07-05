@@ -44,11 +44,23 @@ class BulkTopBind:
         if hasattr(self.ui, 'btn_cox'):
             self.ui.btn_cox.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_cox_page'))
 
+        if hasattr(self.ui, 'btn_cluster'):
+            self.ui.btn_cluster.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_cluster_page'))
+
         if hasattr(self.ui, 'btn_km'):
             self.ui.btn_km.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_km_page'))
 
         if hasattr(self.ui, 'btn_wgcna'):
             self.ui.btn_wgcna.clicked.connect(lambda: page_intersect.go_to_page_with_bind('wgcna_page'))
+
+        if hasattr(self.ui, 'btn_immune'):
+            self.ui.btn_immune.clicked.connect(self.show_immune_dialog)
+
+    def show_immune_dialog(self):
+        """显示bulk免疫分析弹窗"""
+        from script.analyzer_layer.bulk_layer.immune_top_layer.immune_dialog import ImmuneDialog
+        dialog = ImmuneDialog(self.parent)
+        dialog.exec_()
 
     def bind_data_loading(self):
         """绑定数据加载相关控件"""

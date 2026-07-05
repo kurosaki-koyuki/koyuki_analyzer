@@ -7,6 +7,22 @@
 
 from script.utils_layer.import_config import *
 from script.mods_layer.mod_manager import global_mod_manager
+from PyQt5.QtWidgets import QDialog
+
+# 统一字体家族 - 英文优先 Arial，中文 fallback 幼圆
+# 切换 mod 时字体保持不变，只改颜色搭配
+_UNIFIED_FONT_FAMILIES = ["Arial", "幼圆"]
+
+def get_unified_font(size=11, bold=False):
+    """统一字体函数 - 英文优先 Arial，中文 fallback 幼圆。
+    切换 mod 时字体保持不变，避免控件 sizeHint 变化导致出界。
+    """
+    font = QFont()
+    font.setFamilies(_UNIFIED_FONT_FAMILIES)
+    font.setPointSize(size)
+    if bold:
+        font.setBold(True)
+    return font
 
 def get_mod_styles():
     """获取当前模组的样式配置"""
@@ -20,12 +36,8 @@ def create_styled_label(text, font_size=12, bold=True, parent=None, variant='sub
     """创建样式化的标签"""
     s = get_mod_styles()
     label = QLabel(text, parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
-    font = QFont(font_family, font_size)
-    if bold:
-        font.setBold(True)
-    label.setFont(font)
+
+    label.setFont(get_unified_font(font_size, bold))
     
     text_color = s.get(f'{variant}_text_primary', '#87CEEB')
     label.setStyleSheet(f"""
@@ -39,10 +51,8 @@ def create_styled_button(text, font_size=14, parent=None, bold=True, variant='su
     """创建样式化的按钮"""
     s = get_mod_styles()
     btn = QPushButton(text, parent)
-    
-    font_family = s.get(f'{variant}_button_font', s.get('button_font', '幼圆'))
-    font_weight = QFont.Bold if bold else QFont.Normal
-    btn.setFont(QFont(font_family, font_size, font_weight))
+
+    btn.setFont(get_unified_font(font_size, bold))
     
     btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
     
@@ -85,9 +95,8 @@ def create_styled_combo_box(parent=None, fixed_height=None, variant='sub'):
     """创建样式化的下拉框"""
     s = get_mod_styles()
     combo = QComboBox(parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
-    combo.setFont(QFont(font_family, 11))
+
+    combo.setFont(get_unified_font(11))
     
     # 设置默认高度
     if fixed_height is None:
@@ -128,9 +137,8 @@ def create_styled_line_edit(parent=None, fixed_height=None, fixed_width=None, va
     """创建样式化的输入框"""
     s = get_mod_styles()
     line_edit = QLineEdit(parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
-    line_edit.setFont(QFont(font_family, 11))
+
+    line_edit.setFont(get_unified_font(11))
     
     # 设置默认高度
     if fixed_height is None:
@@ -168,9 +176,8 @@ def create_styled_text_edit(parent=None, read_only=False, variant='sub'):
     """创建样式化的文本编辑框"""
     s = get_mod_styles()
     text_edit = QTextEdit(parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
-    text_edit.setFont(QFont(font_family, 11))
+
+    text_edit.setFont(get_unified_font(11))
     
     # 直接使用新架构 key
     input_text = s.get(f'{variant}_input_text', '#87CEEB')
@@ -245,10 +252,9 @@ def create_styled_checkbox(text="", parent=None, fixed_height=None, variant='sub
     """创建样式化的复选框"""
     s = get_mod_styles()
     checkbox = QCheckBox(text, parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
+
     font_size = s.get(f'{variant}_checkbox_font_size', s.get('text_font_size', 9))
-    checkbox.setFont(QFont(font_family, font_size))
+    checkbox.setFont(get_unified_font(font_size))
     
     # 不设置固定高度，让复选框自适应内容高度
     checkbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
@@ -266,9 +272,8 @@ class StyledNumberInput(QWidget):
         super().__init__(parent)
         
         s = get_mod_styles()
-        
+
         # 从style模板获取所有样式参数
-        font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
         input_text = s.get(f'{variant}_input_text', '#87CEEB')
         input_bg = s.get(f'{variant}_input_bg', 'rgba(30, 58, 95, 0.3)')
         input_border = s.get(f'{variant}_input_border', '#1E3A5F')
@@ -297,7 +302,7 @@ class StyledNumberInput(QWidget):
         
         # 创建输入框
         self.line_edit = QLineEdit()
-        self.line_edit.setFont(QFont(font_family, 10))
+        self.line_edit.setFont(get_unified_font(10))
         self.line_edit.setText(str(default_value))
         self.line_edit.setAlignment(Qt.AlignCenter)
         self.line_edit.setFixedHeight(fixed_height)
@@ -342,7 +347,7 @@ class StyledNumberInput(QWidget):
                 background: {button_hover};
             }}
         """)
-        font = QFont(font_family, 8)
+        font = get_unified_font(8)
         self.up_button.setFont(font)
         
         # 创建下调按钮（向下箭头）
@@ -447,9 +452,8 @@ def create_styled_list_widget(parent=None, fixed_height=None, multi_selection=Fa
     """创建样式化的列表控件"""
     s = get_mod_styles()
     list_widget = QListWidget(parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
-    list_widget.setFont(QFont(font_family, 9))
+
+    list_widget.setFont(get_unified_font(9))
     
     # 设置默认高度
     if fixed_height is None:
@@ -968,9 +972,8 @@ def create_styled_group_box(title, parent=None, variant='sub'):
     """创建样式化的分组框"""
     s = get_mod_styles()
     group_box = QGroupBox(title, parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
-    group_box.setFont(QFont(font_family, 12, QFont.Bold))
+
+    group_box.setFont(get_unified_font(12, bold=True))
     
     # 直接使用新架构 key
     group_text = s.get(f'{variant}_group_text', '#87CEEB')
@@ -1035,9 +1038,8 @@ def create_styled_tab_widget(parent=None, variant='sub', movable=False, document
     """
     s = get_mod_styles()
     tab_widget = QTabWidget(parent)
-    
-    font_family = s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑'))
-    tab_widget.setFont(QFont(font_family, 10))
+
+    tab_widget.setFont(get_unified_font(10))
     
     # 设置标签页可拖动排序
     if movable:
@@ -1296,13 +1298,13 @@ def get_stylesheet_for_widget(widget_type, variant='sub'):
                 background: rgba(0, 0, 0, 0.2);
                 border: 1px solid {s.get(f'{variant}_table_border', border_default)};
                 gridline-color: {s.get(f'{variant}_table_border', border_default)};
-                font-family: "微软雅黑";
+                font-family: "幼圆";
                 font-size: 9pt;
             }}
             QTableWidget::item {{
                 padding: 3px;
                 color: black;
-                font-family: "微软雅黑";
+                font-family: "幼圆";
                 font-size: 9pt;
             }}
             QTableWidget::item:selected {{
@@ -1314,42 +1316,28 @@ def get_stylesheet_for_widget(widget_type, variant='sub'):
                 border: 1px solid {s.get(f'{variant}_table_border', border_default)};
                 padding: 5px;
                 font-weight: bold;
-                font-family: "微软雅黑";
+                font-family: "幼圆";
                 font-size: 9pt;
             }}
         """,
     }
-    
+
     return stylesheets.get(widget_type, '')
 
 def get_font_for_widget(widget_type, font_size=12, bold=False, variant='sub'):
     """
-    获取指定控件类型的 QFont 对象
-    
+    获取指定控件类型的 QFont 对象（统一使用 Arial/幼圆 fallback，不读 mod）
+
     Args:
         widget_type: 控件类型 ('button', 'label', 'combo', 'input', 'title')
         font_size: 字体大小
         bold: 是否加粗
-        variant: 变体 ('main' 或 'sub')
-    
+        variant: 变体（保留兼容，不再影响字体选择）
+
     Returns:
         QFont 对象
     """
-    s = get_mod_styles()
-    
-    font_map = {
-        'button': s.get(f'{variant}_button_font', s.get('button_font', '幼圆')),
-        'label': s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑')),
-        'combo': s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑')),
-        'input': s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑')),
-        'title': s.get(f'{variant}_text_font', s.get('text_font', '微软雅黑')),
-    }
-    
-    font_family = font_map.get(widget_type, '微软雅黑')
-    font = QFont(font_family, font_size)
-    if bold:
-        font.setBold(True)
-    return font
+    return get_unified_font(font_size, bold)
 
 def get_main_gui_styles():
     """
@@ -1385,7 +1373,7 @@ def get_main_gui_styles():
     
     # 字体
     button_font = s.get('main_gui_font', '幼圆')
-    label_font = s.get('main_text_font', '微软雅黑')
+    label_font = s.get('main_text_font', '幼圆')
     
     # 按钮样式表
     button_stylesheet = f"""
@@ -1463,8 +1451,8 @@ def get_main_gui_styles():
     
     # 字体映射
     fonts = {
-        'title_font': s.get('main_text_font', '微软雅黑'),
-        'label_font': s.get('main_text_font', '微软雅黑'),
+        'title_font': s.get('main_text_font', '幼圆'),
+        'label_font': s.get('main_text_font', '幼圆'),
         'button_font': s.get('main_gui_font', '幼圆'),
     }
     
@@ -1524,7 +1512,7 @@ def get_sub_gui_styles():
 
     # 字体
     button_font = s.get('sub_button_font', s.get('button_font', '幼圆'))
-    label_font = s.get('sub_text_font', s.get('text_font', '微软雅黑'))
+    label_font = s.get('sub_text_font', s.get('text_font', '幼圆'))
 
     # 按钮样式表
     button_stylesheet = f"""
@@ -1951,4 +1939,305 @@ __all__ = [
     'bind_button_with_sound',
     'ZoomableImageLabel',
     'StyledNumberInput',
+    'QuestionsButton',
+    'create_questions_button',
+    'create_labeled_param_with_help',
 ]
+
+
+# ========================================
+# 问号帮助按钮控件
+# ========================================
+
+class QuestionsButton(QPushButton):
+    """圆形问号按钮 - 点击后弹出无边框对话框显示说明文字"""
+
+    def __init__(self, help_text="", parent=None):
+        super().__init__("?", parent)
+        self._help_text = help_text
+        self._dialog = None
+        self.setFixedSize(22, 22)
+        self.setCursor(Qt.PointingHandCursor)
+        self._apply_style()
+        self.clicked.connect(self._toggle_dialog)
+
+    def _apply_style(self):
+        s = get_mod_styles()
+        fg = s.get('mutant_color', '#E91E63')
+        border = s.get('sub_border_color', '#1E3A5F')
+        bg = s.get('sub_fill_color', 'rgba(30, 58, 95, 0.5)')
+        self.setStyleSheet(f"""
+            QPushButton {{
+                color: {fg};
+                background: {bg};
+                border: 1px solid {border};
+                border-radius: 11px;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 0px;
+            }}
+            QPushButton:hover {{
+                background: {s.get('sub_hover_color', 'rgba(50, 88, 135, 0.6)')};
+            }}
+        """)
+
+    def set_help_text(self, text):
+        self._help_text = text
+
+    def _toggle_dialog(self):
+        if self._dialog is not None and self._dialog.isVisible():
+            self._dialog.close()
+            return
+
+        dialog = _HelpDialog(self._help_text, self.window(), self)
+        self._dialog = dialog
+        dialog.finished.connect(self._on_dialog_finished)
+
+        btn_pos = self.mapToGlobal(QPoint(0, self.height() + 4))
+        dialog.move(btn_pos)
+        dialog.show()
+
+    def _on_dialog_finished(self, result):
+        self._dialog = None
+
+
+class _HelpDialog(QDialog):
+    """无边框帮助对话框 - 点击外部自动关闭"""
+
+    def __init__(self, help_text, parent=None, anchor_button=None):
+        super().__init__(parent)
+        self._anchor_button = anchor_button
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self._build_ui(help_text)
+
+    def _build_ui(self, help_text):
+        s = get_mod_styles()
+        bg = s.get('sub_fill_color', 'rgba(30, 58, 95, 0.95)')
+        border = s.get('sub_border_color', '#1E3A5F')
+        text_color = s.get('mutant_color', '#E91E63')
+
+        container = QWidget(self)
+        container.setStyleSheet(f"""
+            QWidget {{
+                background: {bg};
+                border: 1px solid {border};
+                border-radius: 6px;
+            }}
+        """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 10)
+
+        label = QLabel(help_text, container)
+        label.setWordWrap(True)
+        label.setStyleSheet(f"color: {text_color}; background: transparent; font-size: 13px;")
+        label.setMaximumWidth(320)
+        layout.addWidget(label)
+
+        dialog_layout = QVBoxLayout(self)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        dialog_layout.addWidget(container)
+
+        self.adjustSize()
+
+    def mousePressEvent(self, event):
+        if not self.rect().contains(event.pos()):
+            self.close()
+        super().mousePressEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.setFocus()
+
+    def focusOutEvent(self, event):
+        self.close()
+        super().focusOutEvent(event)
+
+
+def create_questions_button(help_text="", parent=None):
+    """创建圆形问号按钮
+
+    Args:
+        help_text: 点击后显示的说明文字
+        parent: 父控件
+
+    Returns:
+        QuestionsButton 实例
+    """
+    return QuestionsButton(help_text, parent)
+
+
+def create_labeled_param_with_help(label_text, help_text, font_size=12, bold=True, variant='sub'):
+    """创建带问号按钮的参数标签行
+
+    Args:
+        label_text: 参数名称
+        help_text: 问号按钮的说明文字
+        font_size: 字体大小
+        bold: 是否粗体
+        variant: 样式变体
+
+    Returns:
+        tuple: (label, questions_btn) 可放入 QHBoxLayout
+    """
+    label = create_styled_label(label_text, font_size=font_size, bold=bold, variant=variant)
+    q_btn = create_questions_button(help_text)
+    return label, q_btn
+
+
+# ========================================
+# 通用模态弹窗样式（模态无标题栏、居中于主窗口、mod色彩）
+# 所有绑定进入界面的弹窗都应继承 StyledDialog 或调用 get_dialog_stylesheet
+# ========================================
+
+def get_dialog_stylesheet(variant='sub'):
+    """获取弹窗的统一样式表（mod色彩，无标题栏）
+
+    Args:
+        variant: 样式变体，'sub' 为子界面样式，'main' 为主界面样式
+
+    Returns:
+        str: QSS 样式表字符串，用于 dialog.setStyleSheet()
+    """
+    s = get_mod_styles()
+    bg_color = s.get(f'{variant}_fill_color', 'rgba(30, 58, 95, 0.9)')
+    border_color = s.get(f'{variant}_border_color', '#1E3A5F')
+    text_color = s.get(f'{variant}_text_primary', '#87CEEB')
+    mutant_color = s.get(f'{variant}_mutant_color', s.get('mutant_color', '#FF6B35'))
+    hover_color = s.get(f'{variant}_hover_color', mutant_color)
+    radius = s.get(f'{variant}_panel_radius', '10px')
+    return f"""
+        QDialog {{
+            background: {bg_color};
+            border: 2px solid {border_color};
+            border-radius: {radius};
+        }}
+        QLabel {{
+            color: {text_color};
+            background: transparent;
+        }}
+        QPushButton {{
+            color: {text_color};
+            background: {s.get(f'{variant}_button_bg', 'rgba(30, 58, 95, 0.3)')};
+            border: 2px solid {border_color};
+            border-radius: 5px;
+            padding: 5px 15px;
+            min-width: 100px;
+        }}
+        QPushButton:hover {{
+            background: {s.get(f'{variant}_button_hover_bg', 'rgba(30, 58, 95, 0.5)')};
+        }}
+        QPushButton:pressed {{
+            background: {s.get(f'{variant}_button_pressed_bg', 'rgba(135, 206, 235, 0.4)')};
+        }}
+    """
+
+
+def get_dialog_close_button_stylesheet(variant='sub'):
+    """获取弹窗关闭按钮的样式（突变色背景，醒目）"""
+    s = get_mod_styles()
+    mutant_color = s.get(f'{variant}_mutant_color', s.get('mutant_color', '#FF6B35'))
+    hover_color = s.get(f'{variant}_hover_color', mutant_color)
+    return f"""
+        QPushButton {{
+            color: white;
+            background-color: {mutant_color};
+            border: none;
+            border-radius: 5px;
+            padding: 8px 30px;
+            min-width: 100px;
+            min-height: 35px;
+            font-weight: bold;
+        }}
+        QPushButton:hover {{
+            background-color: {hover_color};
+        }}
+    """
+
+
+class StyledDialog(QDialog):
+    """通用模态无标题栏弹窗基类 - 居中于主窗口，使用mod统一样式
+
+    使用方式：
+        class MyDialog(StyledDialog):
+            def _build_ui(self):
+                # 自定义内容，样式已由基类设置好
+                ...
+
+    子界面弹窗继承此类即可获得：
+    - 模态无标题栏（Qt.FramelessWindowHint | Qt.Dialog）
+    - 居中于主窗口中央（showEvent 自动处理）
+    - mod统一样式（背景、边框、文字、按钮颜色跟随mod）
+    - 点击音效过滤器自动安装
+    """
+
+    def __init__(self, main_window, variant='sub', fixed_size=None):
+        """
+        Args:
+            main_window: 主窗口对象，用于居中定位和音效安装
+            variant: 样式变体，'sub' 或 'main'
+            fixed_size: (width, height) 固定尺寸，None 则由内容决定
+        """
+        super().__init__(main_window)
+        self.main_window = main_window
+        self.variant = variant
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setModal(True)
+
+        # 应用统一样式
+        self.setStyleSheet(get_dialog_stylesheet(variant))
+
+        # 设置固定尺寸（如有）
+        if fixed_size:
+            self.setFixedSize(*fixed_size)
+
+        # 子类构建内容
+        self._build_ui()
+
+        # 安装点击音效过滤器
+        self._install_click_filter()
+
+    def _build_ui(self):
+        """子类重写此方法构建弹窗内容"""
+        pass
+
+    def _install_click_filter(self):
+        """安装点击音效过滤器到弹窗及所有子控件"""
+        try:
+            mod_instance = global_mod_manager.get_current_mod()
+            if hasattr(mod_instance, 'get_click_filter_class') and hasattr(mod_instance, 'global_sound_player'):
+                ClickFilterClass = mod_instance.get_click_filter_class()
+                self._click_filter = ClickFilterClass(mod_instance.global_sound_player)
+                self.installEventFilter(self._click_filter)
+                self._install_click_filter_recursively(self)
+        except Exception as e:
+            print(f"安装点击音效过滤器失败: {e}")
+
+    def _install_click_filter_recursively(self, widget):
+        """递归安装点击音效过滤器到所有子控件"""
+        try:
+            if widget and hasattr(widget, 'installEventFilter'):
+                widget.installEventFilter(self._click_filter)
+            if hasattr(widget, 'children'):
+                for child in widget.children():
+                    self._install_click_filter_recursively(child)
+        except Exception:
+            pass
+
+    def showEvent(self, event):
+        """显示事件 - 居中到主窗口中央"""
+        super().showEvent(event)
+        if self.main_window:
+            main_geo = self.main_window.geometry()
+            self.move(
+                main_geo.center().x() - self.width() // 2,
+                main_geo.center().y() - self.height() // 2
+            )
+
+    def done(self, result):
+        """对话框关闭时清理（子类可重写添加恢复逻辑）"""
+        super().done(result)
+
+    def closeEvent(self, event):
+        """关闭事件"""
+        super().closeEvent(event)

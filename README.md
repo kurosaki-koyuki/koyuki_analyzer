@@ -46,14 +46,15 @@ koyuki_analyzer/
 │       │   ├── sc_genelist_bubble_layer/ # 基因集气泡图
 │       │   └── sc_targetgene_bubble_layer/ # 目标基因气泡图
 │       ├── bulk_layer/          # Bulk 分析模块
-│       │   ├── bulk_top_layer/         # ⭐ Bulk主页（数据加载入口）
-│       │   │   ├── ui_layout_bulk_top.py
-│       │   │   ├── ui_bind_bulk_top.py
-│       │   │   ├── ui_func_bulk_top.py
-│       │   │   └── bulk_data_analysis.py
-│       │   ├── bulk_expr_layer/     # 表达量分析
-│       │   ├── bulk_cox_layer/      # Cox 生存分析
-│       │   ├── bulk_km_layer/       # KM 生存曲线
+    │       │   ├── bulk_top_layer/         # ⭐ Bulk主页（数据加载入口）
+    │       │   │   ├── ui_layout_bulk_top.py
+    │       │   │   ├── ui_bind_bulk_top.py
+    │       │   │   ├── ui_func_bulk_top.py
+    │       │   │   └── bulk_data_analysis.py
+    │       │   ├── bulk_expr_layer/     # 表达量分析
+    │       │   ├── bulk_cox_layer/      # Cox 生存分析
+    │       │   ├── bulk_cluster_layer/  # 一致性分析
+    │       │   ├── bulk_km_layer/       # KM 生存曲线
 │       │   │   └── bulk_km_r_layer/ # KM R模式（基于R的生存分析）
 │       │   ├── bulk_corre_layer/    # 相关性分析
 │       │   │   ├── bulk_corredot_layer/     # 相关性散点图
@@ -285,7 +286,7 @@ page_intersect.bind_page_button(button, '目标页面', parent_bind=None)
 page_intersect.init_all_pages(main_window, stacked_widget)
 ```
 
-**当前已注册页面（共17个）：**
+**当前已注册页面（共18个）：**
 
 | 页面名称 | 类型 | 父页面 | 数据来源 |
 |----------|------|--------|----------|
@@ -298,6 +299,7 @@ page_intersect.init_all_pages(main_window, stacked_widget)
 | `bulk_top_page` | Bulk主页 | - | 独立加载 |
 | `bulk_expr_page` | Bulk/表达量分析 | - | bulk_top_page |
 | `bulk_cox_page` | Bulk/Cox分析 | - | bulk_top_page |
+| `bulk_cluster_page` | Bulk/一致性分析 | - | bulk_top_page |
 | `bulk_km_page` | Bulk/KM曲线 | - | bulk_top_page |
 | `bulk_km_r_page` | Bulk/KM-R模式 | bulk_km_page | bulk_km_page |
 | `bulk_corre_page` | Bulk/相关性分析 | - | bulk_top_page |
@@ -498,6 +500,7 @@ def sync_data_from_xxx(self, source_bind=None):
 | Bulk主页 | `bulk_layer/bulk_top_layer/` | 数据加载、扫描、目录选择 | 独立加载 |
 | 表达量分析 | `bulk_layer/bulk_expr_layer/` | 表达量分布、箱线图 | Bulk主页 |
 | Cox分析 | `bulk_layer/bulk_cox_layer/` | 单因素/多因素Cox回归 | Bulk主页 |
+| 一致性分析 | `bulk_layer/bulk_cluster_layer/` | 一致性聚类分析（开发中） | Bulk主页 |
 | KM曲线 | `bulk_layer/bulk_km_layer/` | Kaplan-Meier生存曲线 | Bulk主页 |
 | KM-R模式 | `bulk_layer/bulk_km_layer/bulk_km_r_layer/` | 基于R的KM分析 | KM曲线 |
 | 相关性分析 | `bulk_layer/bulk_corre_layer/` | 基因表达相关性 | Bulk主页 |

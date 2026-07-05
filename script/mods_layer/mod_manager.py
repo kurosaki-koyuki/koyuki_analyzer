@@ -180,7 +180,7 @@ class BaseMod:
         - gui_font: GUI 字体（按钮、下拉框等控件上的文字）
         """
         return {
-            'text_font': '微软雅黑',     # 文字字体：标题、副标题等
+            'text_font': '幼圆',     # 文字字体：标题、副标题等
             'gui_font': '幼圆',          # GUI 字体：按钮、下拉框等
         }
     
@@ -219,7 +219,7 @@ class BaseMod:
         """
         return {
             'gui_font': '幼圆',          # GUI 字体：按钮、下拉框等
-            'info_font': '微软雅黑',     # 信息字体：标签、说明文字等
+            'info_font': '幼圆',     # 信息字体：标签、说明文字等
         }
     
     # =============================================================
@@ -335,8 +335,8 @@ class BaseMod:
             
             # 字体（主界面和子界面字体 key 不同）
             'font_button': fonts.get('gui_font', fonts.get('text_font', '幼圆')),
-            'font_label': fonts.get('info_font', fonts.get('text_font', '微软雅黑')),
-            'font_title': fonts.get('text_font', fonts.get('gui_font', '微软雅黑')),
+            'font_label': fonts.get('info_font', fonts.get('text_font', '幼圆')),
+            'font_title': fonts.get('text_font', fonts.get('gui_font', '幼圆')),
             
             # 圆角
             'radius_sm': '3px',
@@ -485,7 +485,7 @@ class BaseMod:
             'subtitle_color': '#87CEEB',
             'subtitle_background': 'transparent',
             'subtitle_font_size': 14,
-            'subtitle_font': '微软雅黑',
+            'subtitle_font': '幼圆',
             'subtitle_bold': True,
             
             # ===== 主界面突变色（用于特殊按钮）=====

@@ -40,11 +40,13 @@ class MainWindowBind(MainWindowUI):
         self.bind_page_navigation()
         self.bind_general_tools()
 
-        # 初始化音量：确保pygame音量与主界面滑块一致
+        # 初始化音量与音乐播放
         mod_instance = global_mod_manager.get_current_mod()
         if hasattr(mod_instance, 'global_music_player') and hasattr(self, 'volume_slider'):
             initial_volume = self.volume_slider.value()
             mod_instance.global_music_player.set_volume(initial_volume / 100.0)
+            mod_instance.on_load(auto_play=True)
+            self.func.update_music_icon(True)
 
         mod_instance = global_mod_manager.get_current_mod()
         ClickFilterClass = mod_instance.get_click_filter_class()
@@ -131,21 +133,14 @@ class MainWindowBind(MainWindowUI):
 
             # 5. 音乐播放状态恢复（业务层）
             if hasattr(mod_instance, 'global_music_player'):
-                # 先停止当前播放的音乐，避免切换时播放一小下
-                pygame.mixer.music.stop()
-
                 # 加载新模组的音乐资源但不自动播放
                 mod_instance.on_load(auto_play=False)
-
-                # 再次确保停止播放（防止load_music内部触发播放）
-                pygame.mixer.music.stop()
 
                 # 恢复之前的音乐播放状态
                 if old_music_playing:
                     mod_instance.global_music_player.play()
                     self.func.update_music_icon(True)
                 else:
-                    mod_instance.global_music_player.stop()
                     self.func.update_music_icon(False)
 
                 # 恢复之前的音量

@@ -302,42 +302,42 @@ class DiffPageUI:
         stats_layout.setContentsMargins(5, 5, 5, 5)
         
         self.diff_group1_cell_label = QLabel("组1细胞数: 0")
-        self.diff_group1_cell_label.setFont(QFont("微软雅黑", 10))
+        self.diff_group1_cell_label.setFont(QFont("幼圆", 10))
         self.diff_group1_cell_label.setStyleSheet(f"color: {styles.get('sub_mutant_color', '#98FB98')};")
         stats_layout.addWidget(self.diff_group1_cell_label)
         
         stats_layout.addStretch()
         
         self.diff_group2_cell_label = QLabel("组2细胞数: 0")
-        self.diff_group2_cell_label.setFont(QFont("微软雅黑", 10))
+        self.diff_group2_cell_label.setFont(QFont("幼圆", 10))
         self.diff_group2_cell_label.setStyleSheet(f"color: {styles.get('sub_text_color', '#FFB6C1')};")
         stats_layout.addWidget(self.diff_group2_cell_label)
         
         stats_layout.addStretch()
         
         self.diff_up_label = QLabel("组1显著上调: 0")
-        self.diff_up_label.setFont(QFont("微软雅黑", 10))
+        self.diff_up_label.setFont(QFont("幼圆", 10))
         self.diff_up_label.setStyleSheet(f"color: {styles.get('sub_mutant_color', '#FF6B35')};")
         stats_layout.addWidget(self.diff_up_label)
         
         stats_layout.addStretch()
         
         self.diff_down_label = QLabel("组1显著下调: 0")
-        self.diff_down_label.setFont(QFont("微软雅黑", 10))
+        self.diff_down_label.setFont(QFont("幼圆", 10))
         self.diff_down_label.setStyleSheet(f"color: {styles.get('sub_text_color', '#87CEEB')};")
         stats_layout.addWidget(self.diff_down_label)
         
         stats_layout.addStretch()
         
         self.diff_stable_label = QLabel("稳定基因: 0")
-        self.diff_stable_label.setFont(QFont("微软雅黑", 10))
+        self.diff_stable_label.setFont(QFont("幼圆", 10))
         self.diff_stable_label.setStyleSheet(f"color: {styles.get('sub_border_color', '#666666')};")
         stats_layout.addWidget(self.diff_stable_label)
         
         stats_layout.addStretch()
         
         self.diff_total_label = QLabel("总基因: 0")
-        self.diff_total_label.setFont(QFont("微软雅黑", 10))
+        self.diff_total_label.setFont(QFont("幼圆", 10))
         self.diff_total_label.setStyleSheet(f"color: {styles.get('sub_text_color', '#87CEEB')};")
         stats_layout.addWidget(self.diff_total_label)
         

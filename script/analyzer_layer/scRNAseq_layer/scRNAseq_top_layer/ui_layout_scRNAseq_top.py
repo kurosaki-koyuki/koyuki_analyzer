@@ -139,7 +139,7 @@ class ScRNAseqTopPageUI:
         
         left_panel, left_layout = create_styled_panel(fixed_width=220)
         
-        subtitle_font = styles.get('sub_text_font', '微软雅黑')
+        subtitle_font = styles.get('sub_text_font', '幼圆')
         subtitle_font_size = styles.get('subtitle_font_size', 14)
         subtitle_color = styles.get('sub_text_color', '#87CEEB')
         
