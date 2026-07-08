@@ -430,6 +430,8 @@ class RKernelInterface:
                 print(f"[_initialize_rpy2] R环境已初始化")
                 self._is_initialized = True
                 self._error_message = ""
+                if r_home and not self._r_path:
+                    self._r_path = r_home
                 print(f"[_initialize_rpy2] 环境更新成功（R环境已存在）")
                 return True
             except Exception:
@@ -438,6 +440,8 @@ class RKernelInterface:
                 rpy2.rinterface.initr()
                 self._is_initialized = True
                 self._error_message = ""
+                if r_home:
+                    self._r_path = r_home
                 print(f"[_initialize_rpy2] R初始化成功")
                 return True
         except Exception as e:

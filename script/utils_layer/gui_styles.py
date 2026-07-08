@@ -1675,10 +1675,12 @@ class ZoomableImageLabel(QLabel):
         if self._original_pixmap is not None and self.size().isValid():
             label_width = self.size().width()
             label_height = self.size().height()
+            pixmap_width = self._original_pixmap.width()
+            pixmap_height = self._original_pixmap.height()
             
-            if label_width > 0 and label_height > 0:
-                scale_x = label_width / self._original_pixmap.width()
-                scale_y = label_height / self._original_pixmap.height()
+            if label_width > 0 and label_height > 0 and pixmap_width > 0 and pixmap_height > 0:
+                scale_x = label_width / pixmap_width
+                scale_y = label_height / pixmap_height
                 self.scale_factor = min(scale_x, scale_y, 1.0)
             else:
                 self.scale_factor = 1.0

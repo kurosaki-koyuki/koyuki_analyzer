@@ -164,12 +164,12 @@ class PageIntersect:
                     'sync_method': 'sync_data_from_km'
                 },
                 {
-                    'name': 'wgcna_page',
-                    'ui_class': 'WgcnaPageUI',
-                    'ui_module': 'script.analyzer_layer.bulk_layer.wgcna_layer.ui_layout_wgcna',
-                    'bind_class': 'WgcnaBind',
-                    'bind_module': 'script.analyzer_layer.bulk_layer.wgcna_layer.ui_bind_wgcna',
-                    'attr_name': 'wgcna_page',
+                    'name': 'bulk_wgcna_page',
+                    'ui_class': 'BulkWgcnaPageUI',
+                    'ui_module': 'script.analyzer_layer.bulk_layer.wgcna_layer.ui_layout_bulk_wgcna',
+                    'bind_class': 'BulkWgcnaPageBind',
+                    'bind_module': 'script.analyzer_layer.bulk_layer.wgcna_layer.ui_bind_bulk_wgcna',
+                    'attr_name': 'bulk_wgcna_page',
                     'data_source_page': 'bulk_top_page',
                     'sync_method': 'sync_data_from_bulk_main'
                 },

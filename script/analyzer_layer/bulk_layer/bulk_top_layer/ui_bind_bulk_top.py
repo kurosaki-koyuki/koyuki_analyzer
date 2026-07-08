@@ -51,7 +51,7 @@ class BulkTopBind:
             self.ui.btn_km.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_km_page'))
 
         if hasattr(self.ui, 'btn_wgcna'):
-            self.ui.btn_wgcna.clicked.connect(lambda: page_intersect.go_to_page_with_bind('wgcna_page'))
+            self.ui.btn_wgcna.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_wgcna_page'))
 
         if hasattr(self.ui, 'btn_immune'):
             self.ui.btn_immune.clicked.connect(self.show_immune_dialog)
