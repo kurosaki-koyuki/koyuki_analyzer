@@ -74,6 +74,16 @@ class PageIntersect:
                     'sync_method': 'sync_data_from_single_cell_main'
                 },
                 {
+                    'name': 'sc_hdwgcna_page',
+                    'ui_class': 'ScHdWgcnaPageUI',
+                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.sc_hdwgcna_layer.ui_layout_sc_hdwgcna',
+                    'bind_class': 'ScHdWgcnaBind',
+                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.sc_hdwgcna_layer.ui_bind_sc_hdwgcna',
+                    'attr_name': 'sc_hdwgcna_page',
+                    'data_source_page': 'scRNAseq_top_page',
+                    'sync_method': 'sync_data_from_single_cell_main'
+                },
+                {
                     'name': 'bulk_top_page',
                     'ui_class': 'BulkTopPageUI',
                     'ui_module': 'script.analyzer_layer.bulk_layer.bulk_top_layer.ui_layout_bulk_top',

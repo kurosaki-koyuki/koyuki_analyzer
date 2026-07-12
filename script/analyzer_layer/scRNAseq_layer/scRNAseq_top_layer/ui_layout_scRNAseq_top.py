@@ -36,12 +36,16 @@ class ScRNAseqTopPageUI:
         
         button_style = get_stylesheet_for_widget('button')
         for child in self.scRNAseq_top_page.findChildren(QPushButton):
-            if child in [self.btn_select_path, self.btn_load]:
+            if child in [self.btn_select_path, self.btn_load, self.btn_select_rds_path, self.btn_load_rds]:
                 continue
             child.setStyleSheet(button_style)
         
         self.btn_select_path.setStyleSheet(get_stylesheet_for_widget('import_button'))
         self.btn_load.setStyleSheet(get_stylesheet_for_widget('import_button'))
+        if hasattr(self, 'btn_select_rds_path'):
+            self.btn_select_rds_path.setStyleSheet(get_stylesheet_for_widget('import_button'))
+        if hasattr(self, 'btn_load_rds'):
+            self.btn_load_rds.setStyleSheet(get_stylesheet_for_widget('import_button'))
         
         slider_style = get_stylesheet_for_widget('slider')
         for child in self.scRNAseq_top_page.findChildren(QSlider):
@@ -149,6 +153,11 @@ class ScRNAseqTopPageUI:
         data_title.setAlignment(Qt.AlignCenter)
         left_layout.addWidget(data_title)
         
+        h5ad_section_title = QLabel("h5ad数据")
+        h5ad_section_title.setFont(QFont(subtitle_font, 11, QFont.Bold))
+        h5ad_section_title.setStyleSheet(f"color: {subtitle_color}; background: transparent;")
+        left_layout.addWidget(h5ad_section_title)
+        
         self.btn_select_path = create_styled_button("扫描数据路径", font_size=12, button_type='import', parent=left_panel)
         left_layout.addWidget(self.btn_select_path)
         
@@ -158,6 +167,23 @@ class ScRNAseqTopPageUI:
         
         self.btn_load = create_styled_button("加载数据集", font_size=12, button_type='import', parent=left_panel)
         left_layout.addWidget(self.btn_load)
+        
+        left_layout.addSpacing(15)
+        
+        rds_section_title = QLabel("rds数据 (Seurat)")
+        rds_section_title.setFont(QFont(subtitle_font, 11, QFont.Bold))
+        rds_section_title.setStyleSheet(f"color: {subtitle_color}; background: transparent;")
+        left_layout.addWidget(rds_section_title)
+        
+        self.btn_select_rds_path = create_styled_button("扫描rds路径", font_size=12, button_type='import', parent=left_panel)
+        left_layout.addWidget(self.btn_select_rds_path)
+        
+        self.rds_combo = create_styled_combo_box(parent=left_panel)
+        self.rds_combo.setMinimumWidth(180)
+        left_layout.addWidget(self.rds_combo)
+        
+        self.btn_load_rds = create_styled_button("加载Seurat对象", font_size=12, button_type='import', parent=left_panel)
+        left_layout.addWidget(self.btn_load_rds)
         
         left_layout.addSpacing(15)
         
@@ -221,6 +247,13 @@ class ScRNAseqTopPageUI:
         self.btn_diff_analysis = create_styled_button("差异分析", font_size=btn_font_size, parent=col4)
         col4_layout.addWidget(self.btn_diff_analysis, alignment=Qt.AlignCenter)
         columns_layout.addWidget(col4)
+        
+        col5, col5_layout = create_styled_panel(variant='sub')
+        col5_layout.setContentsMargins(8, 8, 8, 8)
+        col5_layout.setSpacing(5)
+        self.btn_hdwgcna = create_styled_button("hdWGCNA分析", font_size=btn_font_size, parent=col5)
+        col5_layout.addWidget(self.btn_hdwgcna, alignment=Qt.AlignCenter)
+        columns_layout.addWidget(col5)
         
         analysis_layout.addLayout(columns_layout)
         

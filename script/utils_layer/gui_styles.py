@@ -1893,6 +1893,8 @@ def create_styled_image_tab(tab_widget, title, parent=None, default_text="请加
     Returns:
         (tab_page, image_label): 标签页容器和图片标签
     """
+    if parent is None and tab_widget:
+        parent = tab_widget
     tab_page = QWidget(parent)
     layout = QVBoxLayout(tab_page)
     layout.setContentsMargins(5, 5, 5, 5)

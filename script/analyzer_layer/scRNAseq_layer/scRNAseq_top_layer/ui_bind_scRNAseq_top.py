@@ -50,12 +50,18 @@ class ScRNAseqTopBind:
         if hasattr(self.ui, 'btn_diff_analysis'):
             self.ui.btn_diff_analysis.clicked.connect(lambda: page_intersect.go_to_page_with_bind('diff_page'))
 
+        if hasattr(self.ui, 'btn_hdwgcna'):
+            self.ui.btn_hdwgcna.clicked.connect(self.go_to_hdwgcna)
+
     def bind_data_loading(self):
         """绑定数据加载相关控件"""
         print(f"[SingleCellMainBind] 检查控件是否存在:")
         print(f"  btn_select_path: {hasattr(self.ui, 'btn_select_path')}")
         print(f"  h5ad_combo: {hasattr(self.ui, 'h5ad_combo')}")
         print(f"  btn_load: {hasattr(self.ui, 'btn_load')}")
+        print(f"  btn_select_rds_path: {hasattr(self.ui, 'btn_select_rds_path')}")
+        print(f"  rds_combo: {hasattr(self.ui, 'rds_combo')}")
+        print(f"  btn_load_rds: {hasattr(self.ui, 'btn_load_rds')}")
         print(f"  status_text: {hasattr(self.ui, 'status_text')}")
         
         if hasattr(self.ui, 'btn_select_path'):
@@ -69,6 +75,18 @@ class ScRNAseqTopBind:
             self.ui.btn_load.clicked.connect(self.load_data)
         else:
             print(f"[SingleCellMainBind] btn_load 不存在!")
+        
+        if hasattr(self.ui, 'btn_select_rds_path'):
+            print(f"[SingleCellMainBind] 绑定 btn_select_rds_path")
+            self.ui.btn_select_rds_path.clicked.connect(self.select_rds_path)
+        else:
+            print(f"[SingleCellMainBind] btn_select_rds_path 不存在!")
+        
+        if hasattr(self.ui, 'btn_load_rds'):
+            print(f"[SingleCellMainBind] 绑定 btn_load_rds")
+            self.ui.btn_load_rds.clicked.connect(self.load_rds_data)
+        else:
+            print(f"[SingleCellMainBind] btn_load_rds 不存在!")
 
     def select_data_path(self):
         """扫描数据路径"""
@@ -99,6 +117,43 @@ class ScRNAseqTopBind:
         
         self.func.update_data_info(data_info)
         self.func.log("数据加载完成")
+
+    def select_rds_path(self):
+        """扫描rds数据路径"""
+        self.func.log(f"开始扫描rds数据路径...")
+        
+        success, files, error = self.analysis.scan_rds_folder()
+        if not success:
+            self.func.log(f"扫描失败: {error}")
+            attention(self.parent, error)
+            return
+        self.func.log(f"扫描成功，找到 {len(files)} 个rds文件")
+        self.func.set_combo_items(self.ui.rds_combo, files, keep_selection=False)
+        self.func.log(f"已更新rds下拉框，共 {self.ui.rds_combo.count()} 项")
+
+    def load_rds_data(self):
+        """加载rds数据（在R内核中创建seurat_obj）"""
+        selected_file = self.ui.rds_combo.currentText()
+        
+        self.func.log("正在加载Seurat对象...")
+        success, rds_info, error = self.analysis.load_rds_data(selected_file)
+        
+        if not success:
+            attention(self.parent, error)
+            self.func.log(error)
+            return
+        
+        self.func.log(f"Seurat对象加载完成!")
+        self.func.log(f"  细胞数: {rds_info['cells']}")
+        self.func.log(f"  基因数: {rds_info['genes']}")
+        self.func.log(f"  数据集: {rds_info['dataset']}")
+
+    def go_to_hdwgcna(self):
+        """跳转到hdWGCNA分析页面"""
+        if not self.analysis.is_seurat_loaded():
+            attention(self.parent, "请先加载Seurat对象（rds文件）")
+            return
+        page_intersect.go_to_page_with_bind('sc_hdwgcna_page')
 
     def bind_music_controls(self):
         """绑定音乐控制"""

@@ -323,6 +323,6 @@ __all__ = [
     'QScrollArea', 'QDialog', 'QGridLayout', 'QFont', 'QPixmap', 'QIcon', 'QImage', 'QColor', 'QKeySequence', 'QPainter',
     'Qt', 'QSize', 'QTimer', 'QObject', 'QEvent', 'QPoint', 'pyqtSignal',
     # 路径配置
-    'BASE_DIR', 'OUTPUT_ROOT', 'OUT_BASE', 'DATA_PATH', 'get_r_script_path',
+    'BASE_DIR', 'OUTPUT_ROOT', 'OUT_BASE', 'DATA_PATH', 'APPDATA_PATH', 'get_r_script_path',
     'SCAN_DATA_PATH', 'BULK_SCAN_DATA_PATH', 'DPI'
 ]
