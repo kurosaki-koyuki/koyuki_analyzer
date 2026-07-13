@@ -260,7 +260,9 @@ class PageIntersect:
                 print(f"[PageIntersect]   UI类获取成功")
                 
                 print(f"[PageIntersect]   尝试创建UI实例")
-                ui_instance = ui_class(main_window, main_window.screen_width, main_window.screen_height)
+                page_width = getattr(main_window, 'base_width', main_window.screen_width)
+                page_height = getattr(main_window, 'base_height', main_window.screen_height)
+                ui_instance = ui_class(main_window, page_width, page_height)
                 print(f"[PageIntersect]   UI实例创建成功")
                 
                 print(f"[PageIntersect]   尝试获取页面控件: {config['attr_name']}")

@@ -55,13 +55,24 @@ class MainWindowBind(MainWindowUI):
         self._install_click_filter_recursively(self)
 
     def _install_click_filter_recursively(self, widget):
-        """递归安装点击音效过滤器到所有子控件"""
+        """递归安装点击音效过滤器到所有子控件（包括QGraphicsView中的控件）"""
         try:
             if widget and hasattr(widget, 'installEventFilter'):
                 widget.installEventFilter(self.click_filter)
+            
             if hasattr(widget, 'children'):
                 for child in widget.children():
                     self._install_click_filter_recursively(child)
+            
+            if isinstance(widget, QGraphicsView):
+                scene = widget.scene()
+                if scene:
+                    scene.installEventFilter(self.click_filter)
+                    for item in scene.items():
+                        if isinstance(item, QGraphicsProxyWidget):
+                            embedded_widget = item.widget()
+                            if embedded_widget:
+                                self._install_click_filter_recursively(embedded_widget)
         except Exception as e:
             print(f"安装点击音效过滤器失败: {e}")
 
@@ -69,10 +80,14 @@ class MainWindowBind(MainWindowUI):
         """初始化变量"""
         paths = global_mod_manager.get_current_paths()
         VideoBackgroundClass = global_mod_manager.get_current_mod().get_video_background_class()
+        
+        bg_width = getattr(self, 'base_width', self.screen_width)
+        bg_height = getattr(self, 'base_height', self.screen_height)
+        
         self.video_bg = VideoBackgroundClass(
             self.home_page,
-            self.screen_width,
-            self.screen_height,
+            bg_width,
+            bg_height,
             startup_video=paths['STARTUP_VIDEO'],
             return_video=paths['STARTUP_RETURN_VIDEO'],
             remain_video=paths['STARTREMAIN_VIDEO']
@@ -245,3 +260,51 @@ class MainWindowBind(MainWindowUI):
     def show_donate_message(self):
         """显示打赏信息（委托给func层）"""
         self.func.show_donate_message()
+
+    # ========================================
+    # 显示模式和分辨率设置方法
+    # ========================================
+    def set_display_mode(self, mode: str) -> bool:
+        """设置显示模式：窗口显示/全屏显示"""
+        try:
+            if mode == "全屏显示":
+                self.showFullScreen()
+                return True
+            elif mode == "窗口显示":
+                self.showNormal()
+                self.resize(self.screen_width, self.screen_height)
+                return True
+            return False
+        except Exception as e:
+            print(f"设置显示模式失败: {e}")
+            return False
+
+    def get_display_mode(self) -> str:
+        """获取当前显示模式"""
+        if self.isFullScreen():
+            return "全屏显示"
+        return "窗口显示"
+
+    def set_window_resolution(self, width: int, height: int) -> bool:
+        """设置窗口分辨率"""
+        try:
+            if self.isFullScreen():
+                self.showNormal()
+            
+            self.screen_width = width
+            self.screen_height = height
+            self.resize(width, height)
+            
+            if hasattr(self, '_update_scene_scale'):
+                self._update_scene_scale()
+            
+            return True
+        except Exception as e:
+            print(f"设置窗口分辨率失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def get_window_resolution(self) -> tuple:
+        """获取当前窗口分辨率"""
+        return (self.screen_width, self.screen_height)

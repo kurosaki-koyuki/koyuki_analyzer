@@ -56,10 +56,12 @@ class MainFunc:
         label = self.main_ui.title_label
         label.setText(styles.get('main_title', "生信工具一览"))
         label.setStyleSheet(f"color: {primary_color}; background: transparent;")
+        base_w = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        base_h = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
         label.setGeometry(
-            int(self.main_ui.screen_width * styles.get('title_x', 0.65)),
-            int(self.main_ui.screen_height * styles.get('title_y', 0.18)),
-            int(self.main_ui.screen_width * styles.get('title_width', 0.3)),
+            int(base_w * styles.get('title_x', 0.65)),
+            int(base_h * styles.get('title_y', 0.18)),
+            int(base_w * styles.get('title_width', 0.3)),
             styles.get('title_height', 50)
         )
 
@@ -67,6 +69,8 @@ class MainFunc:
         """更新副标题标签（字体固定不随mod变化，只更新文字/颜色/位置）"""
         subtitle_color = styles.get('subtitle_color', primary_color)
         subtitle_background = styles.get('subtitle_background', 'transparent')
+        base_w = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        base_h = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
 
         subtitle_configs = [
             ('left_title_label', 'single_cell_title', "单细胞分析",
@@ -84,8 +88,8 @@ class MainFunc:
             label.setText(styles.get(text_key, default_text))
             label.setStyleSheet(f"color: {subtitle_color}; background: {subtitle_background};")
             label.setGeometry(
-                int(self.main_ui.screen_width * styles.get(x_key, 0.68 if 'left' in attr else 0.78 if 'right' in attr else 0.88)),
-                int(self.main_ui.screen_height * styles.get(y_key, 0.28)),
+                int(base_w * styles.get(x_key, 0.68 if 'left' in attr else 0.78 if 'right' in attr else 0.88)),
+                int(base_h * styles.get(y_key, 0.28)),
                 styles.get(w_key, 180),
                 styles.get(h_key, 30)
             )
@@ -127,9 +131,11 @@ class MainFunc:
         """更新打赏按钮位置"""
         if not hasattr(self.main_ui, 'btn_donate'):
             return
+        base_w = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        base_h = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
         self.main_ui.btn_donate.move(
-            int(self.main_ui.screen_width * styles.get('donate_button_x', 0.725)),
-            int(self.main_ui.screen_height * styles.get('donate_button_y', 0.80))
+            int(base_w * styles.get('donate_button_x', 0.725)),
+            int(base_h * styles.get('donate_button_y', 0.80))
         )
 
     # ---------- 视频背景 ----------
@@ -142,10 +148,14 @@ class MainFunc:
         self.main_ui.video_bg.stop()
         new_paths = global_mod_manager.get_current_paths()
         VideoBackgroundClass = global_mod_manager.get_current_mod().get_video_background_class()
+        
+        bg_width = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        bg_height = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
+        
         self.main_ui.video_bg = VideoBackgroundClass(
             self.main_ui.home_page,
-            self.main_ui.screen_width,
-            self.main_ui.screen_height,
+            bg_width,
+            bg_height,
             startup_video=new_paths['STARTUP_VIDEO'],
             return_video=new_paths['STARTUP_RETURN_VIDEO'],
             remain_video=new_paths['STARTREMAIN_VIDEO']

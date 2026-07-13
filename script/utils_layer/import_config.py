@@ -272,7 +272,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QSizePolicy, QListWidget, QListWidgetItem, QCheckBox, QFrame,
                              QGroupBox, QDoubleSpinBox, QSpinBox, QTableWidget, QTableWidgetItem,
                              QTabWidget, QFileDialog, QShortcut, QHeaderView, QAbstractItemView,
-                             QScrollArea, QDialog, QGridLayout)
+                             QScrollArea, QDialog, QGridLayout, QGraphicsView, QGraphicsScene, QGraphicsProxyWidget)
 from PyQt5.QtGui import QFont, QPixmap, QIcon, QImage, QColor, QKeySequence, QPainter
 from PyQt5.QtCore import Qt, QSize, QTimer, QObject, QEvent, QPoint, pyqtSignal
 
@@ -320,7 +320,7 @@ __all__ = [
     'QSizePolicy', 'QListWidget', 'QListWidgetItem', 'QCheckBox', 'QFrame',
     'QGroupBox', 'QDoubleSpinBox', 'QSpinBox', 'QTableWidget', 'QTableWidgetItem',
     'QTabWidget', 'QFileDialog', 'QShortcut', 'QHeaderView', 'QAbstractItemView',
-    'QScrollArea', 'QDialog', 'QGridLayout', 'QFont', 'QPixmap', 'QIcon', 'QImage', 'QColor', 'QKeySequence', 'QPainter',
+    'QScrollArea', 'QDialog', 'QGridLayout', 'QGraphicsView', 'QGraphicsScene', 'QGraphicsProxyWidget', 'QFont', 'QPixmap', 'QIcon', 'QImage', 'QColor', 'QKeySequence', 'QPainter',
     'Qt', 'QSize', 'QTimer', 'QObject', 'QEvent', 'QPoint', 'pyqtSignal',
     # 路径配置
     'BASE_DIR', 'OUTPUT_ROOT', 'OUT_BASE', 'DATA_PATH', 'APPDATA_PATH', 'get_r_script_path',

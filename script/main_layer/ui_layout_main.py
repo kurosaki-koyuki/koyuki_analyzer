@@ -7,6 +7,8 @@
 """
 
 from script.utils_layer.import_config import *
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsProxyWidget, QFrame
+from PyQt5.QtGui import QPainter
 from script.utils_layer.utils_tools import ScalableLabel
 from script.utils_layer.gui_styles import create_styled_button, create_styled_combo_box, create_styled_slider
 from script.mods_layer.mod_manager import global_mod_manager
@@ -21,10 +23,11 @@ class MainWindowUI(QMainWindow):
         styles = global_mod_manager.get_current_styles()
         
         self.setWindowTitle(styles.get('window_title', "小雪生信工具箱"))
-        # 固定窗口大小为1920x1040，确保完整显示在1080P屏幕上（含标题栏）
-        self.screen_width = 1920
-        self.screen_height = 1000
-        self.setFixedSize(self.screen_width, self.screen_height)
+        self.base_width = 1920
+        self.base_height = 1000
+        self.screen_width = self.base_width
+        self.screen_height = self.base_height
+        self.resize(self.screen_width, self.screen_height)
         self.move(0, 0)
         
         paths = global_mod_manager.get_current_paths()
@@ -37,8 +40,27 @@ class MainWindowUI(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.stacked_widget = QStackedWidget()
-        main_layout.addWidget(self.stacked_widget)
+        self.graphics_view = QGraphicsView(central_widget)
+        self.graphics_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.graphics_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.graphics_view.setFrameShape(QFrame.NoFrame)
+        self.graphics_view.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+        main_layout.addWidget(self.graphics_view)
+        
+        self.graphics_scene = QGraphicsScene()
+        self.graphics_scene.setSceneRect(0, 0, self.base_width, self.base_height)
+        self.graphics_view.setScene(self.graphics_scene)
+        
+        self.content_widget = QWidget()
+        self.content_widget.setFixedSize(self.base_width, self.base_height)
+        
+        self.stacked_widget = QStackedWidget(self.content_widget)
+        self.stacked_widget.setGeometry(0, 0, self.base_width, self.base_height)
+        
+        self.proxy_widget = self.graphics_scene.addWidget(self.content_widget)
+        self.proxy_widget.setPos(0, 0)
+        
+        self._current_scale = 1.0
         
         self.create_home_page()
         page_intersect.register_page('home_page', self.home_page)
@@ -46,6 +68,8 @@ class MainWindowUI(QMainWindow):
         page_intersect.init_all_pages(self, self.stacked_widget)
         
         self.stacked_widget.setCurrentWidget(self.home_page)
+        
+        QTimer.singleShot(0, self._update_scene_scale)
     
     def create_styled_button(self, text, parent=None, font_size=16, color_style='blue'):
         """
@@ -88,10 +112,10 @@ class MainWindowUI(QMainWindow):
     def create_home_page(self):
         styles = global_mod_manager.get_current_styles()
         self.home_page = QWidget()
-        self.home_page.setGeometry(0, 0, self.screen_width, self.screen_height)
+        self.home_page.setGeometry(0, 0, self.base_width, self.base_height)
         
         self.video_bg_label = QLabel(self.home_page)
-        self.video_bg_label.setGeometry(0, 0, self.screen_width, self.screen_height)
+        self.video_bg_label.setGeometry(0, 0, self.base_width, self.base_height)
         self.video_bg_label.setStyleSheet(f"background-color: {styles.get('main_fill_color', '#1a1a2e')};")
         self.video_bg_label.lower()
         
@@ -121,7 +145,7 @@ class MainWindowUI(QMainWindow):
         )
         mod_container.setStyleSheet(f"background: transparent;")
         
-        self.mod_label = QLabel("模式选择:", mod_container)
+        self.mod_label = QLabel("模组:", mod_container)
         self.mod_label.setFont(QFont(text_font, styles.get('mod_label_font_size', 12), QFont.Bold))
         self.mod_label.setStyleSheet(f"color: {text_color}; background: transparent;")
         self.mod_label.move(0, 10)
@@ -145,9 +169,19 @@ class MainWindowUI(QMainWindow):
         if index >= 0:
             self.mod_combo.setCurrentIndex(index)
         
+        original_show_popup = self.mod_combo.showPopup
+        def fixed_show_popup():
+            saved_idx = self.mod_combo.currentIndex()
+            self.mod_combo.blockSignals(True)
+            self.mod_combo.setCurrentIndex(0)
+            original_show_popup()
+            self.mod_combo.setCurrentIndex(saved_idx)
+            self.mod_combo.blockSignals(False)
+        self.mod_combo.showPopup = fixed_show_popup
+        
         music_container = QWidget(self.home_page)
         music_container.setGeometry(
-            int(self.screen_width * styles.get('music_container_x', 0.9)),
+            int(self.base_width * styles.get('music_container_x', 0.9)),
             styles.get('music_container_y', 15),
             styles.get('music_container_width', 280),
             styles.get('music_container_height', 50)
@@ -195,7 +229,7 @@ class MainWindowUI(QMainWindow):
             styles.get('settings_button_height', 40)
         )
         # 位置在music_container右侧，垂直位置与music_container相同
-        container_x = int(self.screen_width * styles.get('music_container_x', 0.9))
+        container_x = int(self.base_width * styles.get('music_container_x', 0.9))
         container_y = styles.get('music_container_y', 15)
         container_width = styles.get('music_container_width', 200)
         self.settings_btn.move(
@@ -222,9 +256,9 @@ class MainWindowUI(QMainWindow):
         self.title_label.setStyleSheet(f"color: {styles.get('title_color', text_color)}; background: transparent;")
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setGeometry(
-            int(self.screen_width * styles.get('title_x', 0.65)),
-            int(self.screen_height * styles.get('title_y', 0.18)),
-            int(self.screen_width * styles.get('title_width', 0.3)),
+            int(self.base_width * styles.get('title_x', 0.65)),
+            int(self.base_height * styles.get('title_y', 0.18)),
+            int(self.base_width * styles.get('title_width', 0.3)),
             styles.get('title_height', 50)
         )
         
@@ -233,8 +267,8 @@ class MainWindowUI(QMainWindow):
         self.left_title_label.setStyleSheet(f"color: {subtitle_color}; background: {subtitle_background};")
         self.left_title_label.setAlignment(Qt.AlignCenter)
         self.left_title_label.setGeometry(
-            int(self.screen_width * styles.get('left_title_x', 0.68)),
-            int(self.screen_height * styles.get('left_title_y', 0.28)),
+            int(self.base_width * styles.get('left_title_x', 0.68)),
+            int(self.base_height * styles.get('left_title_y', 0.28)),
             styles.get('left_title_width', 180),
             styles.get('left_title_height', 30)
         )
@@ -244,8 +278,8 @@ class MainWindowUI(QMainWindow):
         self.right_title_label.setStyleSheet(f"color: {subtitle_color}; background: {subtitle_background};")
         self.right_title_label.setAlignment(Qt.AlignCenter)
         self.right_title_label.setGeometry(
-            int(self.screen_width * styles.get('right_title_x', 0.78)),
-            int(self.screen_height * styles.get('right_title_y', 0.28)),
+            int(self.base_width * styles.get('right_title_x', 0.78)),
+            int(self.base_height * styles.get('right_title_y', 0.28)),
             styles.get('right_title_width', 180),
             styles.get('right_title_height', 30)
         )
@@ -253,30 +287,33 @@ class MainWindowUI(QMainWindow):
         btn_w = styles.get('button_width', 180)
         btn_h = styles.get('button_height', 60)
         btn_font_size = styles.get('button_font_size', 16)
-        btn_start_x = int(self.screen_width * styles.get('button_start_x', 0.68))
-        btn_start_y = int(self.screen_height * styles.get('button_start_y', 0.32))
-        row_gap = int(self.screen_height * styles.get('button_row_gap', 0.08))
+        btn_start_x = int(self.base_width * styles.get('button_start_x', 0.68))
+        btn_start_y = int(self.base_height * styles.get('button_start_y', 0.32))
+        row_gap = int(self.base_height * styles.get('button_row_gap', 0.08))
         
         self.btn_single_cell_main = self.create_styled_button("进入单细胞分析", parent=self.home_page, font_size=btn_font_size)
+        self.btn_single_cell_main.setFixedSize(btn_w, btn_h)
         self.btn_single_cell_main.move(btn_start_x, btn_start_y)
         
-        right_start_x = int(self.screen_width * styles.get('right_title_x', 0.78))
+        right_start_x = int(self.base_width * styles.get('right_title_x', 0.78))
         self.btn_bulk_main = self.create_styled_button("进入Bulk分析", parent=self.home_page, font_size=btn_font_size)
+        self.btn_bulk_main.setFixedSize(btn_w, btn_h)
         self.btn_bulk_main.move(right_start_x, btn_start_y)
         
-        tools_start_x = int(self.screen_width * styles.get('tools_title_x', 0.88))
+        tools_start_x = int(self.base_width * styles.get('tools_title_x', 0.88))
         self.tools_title_label = QLabel(styles.get('tools_title', "通用小工具"), self.home_page)
         self.tools_title_label.setFont(QFont(subtitle_font, subtitle_font_size, QFont.Bold if subtitle_bold else QFont.Normal))
         self.tools_title_label.setStyleSheet(f"color: {subtitle_color}; background: {subtitle_background};")
         self.tools_title_label.setAlignment(Qt.AlignCenter)
         self.tools_title_label.setGeometry(
             tools_start_x,
-            int(self.screen_height * styles.get('tools_title_y', 0.28)),
+            int(self.base_height * styles.get('tools_title_y', 0.28)),
             styles.get('tools_title_width', 180),
             styles.get('tools_title_height', 30)
         )
         
         self.btn_venn = self.create_styled_button("韦恩图交集", parent=self.home_page, font_size=btn_font_size)
+        self.btn_venn.setFixedSize(btn_w, btn_h)
         self.btn_venn.move(tools_start_x, btn_start_y)
         
         self.btn_donate = QPushButton("打赏作者", self.home_page)
@@ -297,19 +334,19 @@ class MainWindowUI(QMainWindow):
             }}
         """)
         self.btn_donate.move(
-            int(self.screen_width * styles.get('donate_button_x', 0.725)),
-            int(self.screen_height * styles.get('donate_button_y', 0.80))
+            int(self.base_width * styles.get('donate_button_x', 0.725)),
+            int(self.base_height * styles.get('donate_button_y', 0.80))
         )
         
         self.stacked_widget.addWidget(self.home_page)
     
     def update_button_positions(self, styles):
         """更新所有按钮位置 - 位置布局逻辑统一放在layout层"""
-        btn_start_x = int(self.screen_width * styles.get('button_start_x', 0.68))
-        btn_start_y = int(self.screen_height * styles.get('button_start_y', 0.32))
-        row_gap = int(self.screen_height * styles.get('button_row_gap', 0.08))
-        right_start_x = int(self.screen_width * styles.get('right_title_x', 0.78))
-        tools_start_x = int(self.screen_width * styles.get('tools_title_x', 0.88))
+        btn_start_x = int(self.base_width * styles.get('button_start_x', 0.68))
+        btn_start_y = int(self.base_height * styles.get('button_start_y', 0.32))
+        row_gap = int(self.base_height * styles.get('button_row_gap', 0.08))
+        right_start_x = int(self.base_width * styles.get('right_title_x', 0.78))
+        tools_start_x = int(self.base_width * styles.get('tools_title_x', 0.88))
         
         buttons = [
             ('btn_single_cell_main', btn_start_x, btn_start_y),
@@ -325,3 +362,36 @@ class MainWindowUI(QMainWindow):
         """返回主页"""
         if hasattr(self, 'home_page') and self.home_page:
             self.stacked_widget.setCurrentWidget(self.home_page)
+    
+    def _update_scene_scale(self):
+        """更新场景缩放比例，使内容适应视图大小"""
+        try:
+            view_width = self.graphics_view.width()
+            view_height = self.graphics_view.height()
+            
+            if view_width <= 0 or view_height <= 0:
+                return
+            
+            scale_x = view_width / self.base_width
+            scale_y = view_height / self.base_height
+            scale = min(scale_x, scale_y)
+            
+            self._current_scale = scale
+            
+            self.graphics_view.resetTransform()
+            self.graphics_view.scale(scale, scale)
+            
+            self.screen_width = int(self.base_width * scale)
+            self.screen_height = int(self.base_height * scale)
+        except Exception as e:
+            print(f"更新场景缩放失败: {e}")
+    
+    def resizeEvent(self, event):
+        """窗口大小改变时重新计算缩放"""
+        super().resizeEvent(event)
+        self._update_scene_scale()
+    
+    def showEvent(self, event):
+        """窗口显示时重新计算缩放"""
+        super().showEvent(event)
+        self._update_scene_scale()

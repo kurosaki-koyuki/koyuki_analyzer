@@ -1995,7 +1995,7 @@ class QuestionsButton(QPushButton):
 
         dialog = _HelpDialog(self._help_text, self.window(), self)
         self._dialog = dialog
-        dialog.finished.connect(self._on_dialog_finished)
+        dialog.destroyed.connect(self._on_dialog_finished)
 
         btn_pos = self.mapToGlobal(QPoint(0, self.height() + 4))
         dialog.move(btn_pos)
@@ -2005,14 +2005,15 @@ class QuestionsButton(QPushButton):
         self._dialog = None
 
 
-class _HelpDialog(QDialog):
+class _HelpDialog(QWidget):
     """无边框帮助对话框 - 点击外部自动关闭"""
 
     def __init__(self, help_text, parent=None, anchor_button=None):
         super().__init__(parent)
         self._anchor_button = anchor_button
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup | Qt.NoDropShadowWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
         self._build_ui(help_text)
 
     def _build_ui(self, help_text):
@@ -2020,6 +2021,8 @@ class _HelpDialog(QDialog):
         bg = s.get('sub_fill_color', 'rgba(30, 58, 95, 0.95)')
         border = s.get('sub_border_color', '#1E3A5F')
         text_color = s.get('mutant_color', '#E91E63')
+
+        self.setStyleSheet("QWidget { background: transparent; border: none; }")
 
         container = QWidget(self)
         container.setStyleSheet(f"""

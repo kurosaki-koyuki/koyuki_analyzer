@@ -166,26 +166,14 @@ class SettingsPageUI:
         right_panel, right_layout = create_styled_panel()
         right_layout.setContentsMargins(20, 20, 20, 20)
         
-        # 开发中标题
-        dev_title = create_styled_label("其他设置", font_size=16, bold=True)
-        right_layout.addWidget(dev_title)
+        right_title = create_styled_label("更多功能", font_size= 16, bold=True)
+        right_layout.addWidget(right_title)
         
-        right_layout.addSpacing(10)
+        right_layout.addSpacing(20)
         
-        # 开发中信息
-        dev_label = QLabel("🚧 其他功能开发中 🚧")
-        dev_label.setFont(get_font_for_widget('label', 18))
-        dev_label.setStyleSheet(f"color: {styles.get('warning_color', '#FFA500')}; background: transparent;")
-        dev_label.setAlignment(Qt.AlignCenter)
-        right_layout.addWidget(dev_label)
-        
-        right_layout.addSpacing(10)
-        
-        coming_soon_label = QLabel("敬请期待更多设置选项...")
-        coming_soon_label.setFont(get_font_for_widget('label', 12))
-        coming_soon_label.setStyleSheet(f"color: {styles.get('sub_text_secondary', '#888888')}; background: transparent;")
-        coming_soon_label.setAlignment(Qt.AlignCenter)
-        right_layout.addWidget(coming_soon_label)
+        right_tip = create_styled_label("功能开发中，敬请期待...", font_size=12, bold=False)
+        right_tip.setStyleSheet(f"color: {styles.get('sub_text_secondary', '#888888')};")
+        right_layout.addWidget(right_tip)
         
         right_layout.addStretch()
         
