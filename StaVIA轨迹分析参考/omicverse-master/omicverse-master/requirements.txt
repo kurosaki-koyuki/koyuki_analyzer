@@ -1,0 +1,56 @@
+scipy < 1.12
+scikit-image == 0.21.0
+omicverse
+pandas
+scanpy
+matplotlib
+seaborn
+scikit-learn
+sphinx_autosummary_accessors
+sphinx_autodoc_typehints
+recommonmark
+sphinx_markdown_tables
+sphinx_copybutton
+nbsphinx
+pytest-asyncio>=0.23
+IPython
+ipywidgets
+lifelines
+boltons
+ctxcore
+multiprocess
+ktplotspy
+leidenalg
+datashader
+graphtools
+igraph
+phate
+jinja2 == 3.1.2
+griffe == 0.26.0
+mkdocs == 1.6.1
+#mkdocs-jupyter==0.23.0
+mkdocs-mermaid2-plugin==1.1.1
+mkdocs-jupyter==0.25.1
+mkdocs-material==9.1.2
+mkdocs-glightbox==0.3.2
+mkdocstrings == 0.20.0
+mkapi == 4.5.0
+mkdocs-gen-files ==0.4.0
+mkdocstrings-python ==0.9.0
+mkdocs-autorefs==0.4.1
+Pygments<2.20
+python-dotplot
+metatime
+tensorboard
+mellon
+ctxcore
+pydeseq2 > 0.3
+mkdocs-plotly-plugin==0.1.3
+bioservices
+tomli
+requests
+wandb
+munch
+datasets
+openai
+mcp

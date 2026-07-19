@@ -25,12 +25,12 @@ class PageIntersect:
                     'attr_name': 'scRNAseq_top_page'
                 },
                 {
-                    'name': 'analysis_page',
-                    'ui_class': 'InitialAnalysisPageUI',
-                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.initial_analysis_layer.ui_layout_initial_analysis',
-                    'bind_class': 'InitialAnalysisBind',
-                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.initial_analysis_layer.ui_bind_initial_analysis',
-                    'attr_name': 'analysis_page',
+                    'name': 'sc_umap_initial_page',
+                    'ui_class': 'ScUmapInitialPageUI',
+                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.sc_umap_initial_layer.ui_layout_sc_umap_initial',
+                    'bind_class': 'ScUmapInitialBind',
+                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.sc_umap_initial_layer.ui_bind_sc_umap_initial',
+                    'attr_name': 'sc_umap_initial_page',
                     'data_source_page': 'scRNAseq_top_page',
                     'sync_method': 'sync_data_from_single_cell_main'
                 },
@@ -46,10 +46,20 @@ class PageIntersect:
                 },
                 {'name': 'diff_page',
                     'ui_class': 'DiffPageUI',
-                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.diff_layer.ui_layout_diff',
+                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.diff_layer.py_diff.ui_layout_diff',
                     'bind_class': 'DiffBind',
-                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.diff_layer.ui_bind_diff',
+                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.diff_layer.py_diff.ui_bind_diff',
                     'attr_name': 'diff_page',
+                    'data_source_page': 'scRNAseq_top_page',
+                    'sync_method': 'sync_data_from_single_cell_main'
+                },
+                {
+                    'name': 'scRNAseq_r_diff_page',
+                    'ui_class': 'RDiffPageUI',
+                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.diff_layer.r_diff.ui_layout_r_diff',
+                    'bind_class': 'RDiffBind',
+                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.diff_layer.r_diff.ui_bind_r_diff',
+                    'attr_name': 'r_diff_page',
                     'data_source_page': 'scRNAseq_top_page',
                     'sync_method': 'sync_data_from_single_cell_main'
                 },
@@ -84,6 +94,36 @@ class PageIntersect:
                     'sync_method': 'sync_data_from_single_cell_main'
                 },
                 {
+                    'name': 'sc_stavia_page',
+                    'ui_class': 'ScStaviaPageUI',
+                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.sc_stavia_layer.ui_layout_sc_stavia',
+                    'bind_class': 'ScStaviaBind',
+                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.sc_stavia_layer.ui_bind_sc_stavia',
+                    'attr_name': 'sc_stavia_page',
+                    'data_source_page': 'scRNAseq_top_page',
+                    'sync_method': 'sync_data_from_single_cell_main'
+                },
+                {
+                    'name': 'sc_monocle_page',
+                    'ui_class': 'ScMonoclePageUI',
+                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.sc_monocle_layer.ui_layout_sc_monocle',
+                    'bind_class': 'ScMonocleBind',
+                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.sc_monocle_layer.ui_bind_sc_monocle',
+                    'attr_name': 'sc_monocle_page',
+                    'data_source_page': 'scRNAseq_top_page',
+                    'sync_method': 'sync_data_from_single_cell_main'
+                },
+                {
+                    'name': 'sc_gdsc_drug_sensitivity_page',
+                    'ui_class': 'ScGdscDrugSensitivityPageUI',
+                    'ui_module': 'script.analyzer_layer.scRNAseq_layer.sc_gdsc_drug_sensitivity_layer.ui_layout_sc_gdsc_drug_sensitivity',
+                    'bind_class': 'ScGdscDrugSensitivityBind',
+                    'bind_module': 'script.analyzer_layer.scRNAseq_layer.sc_gdsc_drug_sensitivity_layer.ui_bind_sc_gdsc_drug_sensitivity',
+                    'attr_name': 'sc_gdsc_drug_sensitivity_page',
+                    'data_source_page': 'scRNAseq_top_page',
+                    'sync_method': 'sync_data_from_single_cell_main'
+                },
+                {
                     'name': 'bulk_top_page',
                     'ui_class': 'BulkTopPageUI',
                     'ui_module': 'script.analyzer_layer.bulk_layer.bulk_top_layer.ui_layout_bulk_top',
@@ -108,6 +148,26 @@ class PageIntersect:
                     'bind_class': 'BulkCoxBind',
                     'bind_module': 'script.analyzer_layer.bulk_layer.bulk_cox_layer.ui_bind_bulk_cox',
                     'attr_name': 'bulk_cox_page',
+                    'data_source_page': 'bulk_top_page',
+                    'sync_method': 'sync_data_from_bulk_main'
+                },
+                {
+                    'name': 'bulk_diff_page',
+                    'ui_class': 'BulkDiffPageUI',
+                    'ui_module': 'script.analyzer_layer.bulk_layer.bulk_diff_layer.ui_layout_bulk_diff',
+                    'bind_class': 'BulkDiffBind',
+                    'bind_module': 'script.analyzer_layer.bulk_layer.bulk_diff_layer.ui_bind_bulk_diff',
+                    'attr_name': 'bulk_diff_page',
+                    'data_source_page': 'bulk_top_page',
+                    'sync_method': 'sync_data_from_bulk_main'
+                },
+                {
+                    'name': 'bulk_logrank_page',
+                    'ui_class': 'BulkLogrankPageUI',
+                    'ui_module': 'script.analyzer_layer.bulk_layer.bulk_logrank_layer.ui_layout_bulk_logrank',
+                    'bind_class': 'BulkLogrankBind',
+                    'bind_module': 'script.analyzer_layer.bulk_layer.bulk_logrank_layer.ui_bind_bulk_logrank',
+                    'attr_name': 'bulk_logrank_page',
                     'data_source_page': 'bulk_top_page',
                     'sync_method': 'sync_data_from_bulk_main'
                 },
@@ -164,22 +224,22 @@ class PageIntersect:
                     'sync_method': 'sync_data_from_bulk_main'
                 },
                 {
-                    'name': 'bulk_km_r_page',
-                    'ui_class': 'BulkKmRPageUI',
-                    'ui_module': 'script.analyzer_layer.bulk_layer.bulk_km_layer.bulk_km_r_layer.ui_layout_bulk_km_r',
-                    'bind_class': 'BulkKmRBind',
-                    'bind_module': 'script.analyzer_layer.bulk_layer.bulk_km_layer.bulk_km_r_layer.ui_bind_bulk_km_r',
-                    'attr_name': 'bulk_km_r_page',
-                    'parent_page': 'bulk_km_page',
-                    'sync_method': 'sync_data_from_km'
-                },
-                {
                     'name': 'bulk_wgcna_page',
                     'ui_class': 'BulkWgcnaPageUI',
                     'ui_module': 'script.analyzer_layer.bulk_layer.wgcna_layer.ui_layout_bulk_wgcna',
                     'bind_class': 'BulkWgcnaPageBind',
                     'bind_module': 'script.analyzer_layer.bulk_layer.wgcna_layer.ui_bind_bulk_wgcna',
                     'attr_name': 'bulk_wgcna_page',
+                    'data_source_page': 'bulk_top_page',
+                    'sync_method': 'sync_data_from_bulk_main'
+                },
+                {
+                    'name': 'bulk_gdsc_drug_sensitivity_page',
+                    'ui_class': 'BulkGdscDrugSensitivityPageUI',
+                    'ui_module': 'script.analyzer_layer.bulk_layer.bulk_gdsc_drug_sensitivity_layer.ui_layout_bulk_gdsc_drug_sensitivity',
+                    'bind_class': 'BulkGdscDrugSensitivityBind',
+                    'bind_module': 'script.analyzer_layer.bulk_layer.bulk_gdsc_drug_sensitivity_layer.ui_bind_bulk_gdsc_drug_sensitivity',
+                    'attr_name': 'bulk_gdsc_drug_sensitivity_page',
                     'data_source_page': 'bulk_top_page',
                     'sync_method': 'sync_data_from_bulk_main'
                 },

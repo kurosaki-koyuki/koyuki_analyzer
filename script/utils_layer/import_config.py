@@ -274,7 +274,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTabWidget, QFileDialog, QShortcut, QHeaderView, QAbstractItemView,
                              QScrollArea, QDialog, QGridLayout, QGraphicsView, QGraphicsScene, QGraphicsProxyWidget)
 from PyQt5.QtGui import QFont, QPixmap, QIcon, QImage, QColor, QKeySequence, QPainter
-from PyQt5.QtCore import Qt, QSize, QTimer, QObject, QEvent, QPoint, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, QTimer, QObject, QEvent, QPoint, pyqtSignal, QThread
 
 def get_r_script_path(caller_file, r_script_name):
     """

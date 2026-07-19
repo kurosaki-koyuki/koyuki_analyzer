@@ -1,0 +1,84 @@
+dist
+build
+.ipynb_checkpoints
+tutorial
+#models
+.DS_Store
+omicverse.egg-info
+aliyun_analytics_server/
+.ipynb_checkpoints
+__pycache__
+meta.yaml
+data
+# Keep packaged metabolomics lookup / pathway tables (CSV is source-of-truth;
+# parquet is a generated cache and should not be committed)
+!omicverse/metabol/data/
+!omicverse/metabol/data/*.csv
+!omicverse/metabol/data/*.json
+!omicverse/metabol/data/README*
+omicverse/metabol/data/*.parquet
+# Keep the vendored single-cell-metabolism backend data (gene sets,
+# metabolic models, metabolite-sensor DB) — required at run time.
+!omicverse/external/py_scmetabolism/data/
+!omicverse/external/py_scmetabolism/data/**
+!omicverse/external/scfea/data/
+!omicverse/external/scfea/data/**
+!omicverse/external/mebocost/data/
+!omicverse/external/mebocost/data/**
+genesets
+temp
+result_simba
+enrichr
+.pytest*
+.idea/
+omicverse_guide/site
+*bin
+*sqlite3
+*log
+*moban*
+
+# Generated documentation output. The built site is deployed to
+# omicverse/omicverse-pages and must not be committed to this repo.
+omicverse_guide/docs/_build/
+omicverse_guide/docs_zh/_build/
+omicverse_guide/docs/.doctrees/
+omicverse_guide/docs_zh/.doctrees/
+omicverse_guide/docs/jupyter_execute/
+omicverse_guide/docs_zh/jupyter_execute/
+omicverse_guide/docs/_sources/
+omicverse_guide/docs_zh/_sources/
+site/
+.doctrees/
+_sources/
+_build/
+jupyter_execute/
+# Local, non-repo directories
+Skill_Seekers/
+skill_seekers/
+tmp/
+tmp_omicverse/
+
+# Local progress log
+progress.json
+
+# Coverage reports
+.coverage
+.coverage.*
+.ruff*
+coverage.json
+htmlcov/
+.pantheon/
+.notebook_contexts.json
+
+#omicverse_web
+omicverse_web/models/
+omicverse_web/data/
+
+# omicclaw alias/release scaffolding
+.build/
+omicclaw/
+docs*
+# Multi-agent worktrees
+.worktrees/
+.orchestrator/
+uv.lock

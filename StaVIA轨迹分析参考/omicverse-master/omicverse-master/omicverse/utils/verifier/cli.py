@@ -1,0 +1,855 @@
+"""
+CLI Tool for OmicVerse Skills Verifier - Phase 6
+
+Command-line interface for running verification, validating descriptions,
+and extracting tasks from notebooks.
+"""
+
+import sys
+import argparse
+import json
+import time
+from pathlib import Path
+from typing import Optional
+
+from .skill_description_loader import SkillDescriptionLoader
+from .llm_skill_selector import create_skill_selector
+from .skill_description_quality import create_quality_checker
+from .notebook_task_extractor import create_task_extractor
+from .end_to_end_verifier import (
+    create_verifier,
+    VerificationRunConfig,
+)
+from ..harness.server_cli import (
+    dump_json,
+    load_trace_payload,
+    require_server_only_mode,
+    run_cleanup,
+    run_scenario,
+    summarize_trace,
+)
+from ..ovagent import RunStore, load_workflow_document
+
+
+def cmd_verify(args):
+    """Run end-to-end verification."""
+    print("=" * 80)
+    print("OmicVerse Skills Verifier - Running Verification")
+    print("=" * 80)
+    print()
+
+    # Create config
+    config = VerificationRunConfig(
+        notebooks_dir=args.notebooks_dir,
+        notebook_pattern=args.pattern,
+        model=args.model,
+        temperature=args.temperature,
+        max_concurrent_tasks=args.max_concurrent,
+        skip_notebooks=args.skip or [],
+        only_categories=args.categories or None,
+    )
+
+    print(f"Notebooks directory: {config.notebooks_dir}")
+    print(f"Pattern: {config.notebook_pattern}")
+    print(f"Model: {config.model}")
+    print(f"Max concurrent: {config.max_concurrent_tasks}")
+    if config.only_categories:
+        print(f"Categories filter: {', '.join(config.only_categories)}")
+    print()
+
+    # Create verifier
+    print("Initializing verifier...")
+    verifier = create_verifier(skills_dir=args.skills_dir)
+    print(f"Loaded {len(verifier.skills)} skills")
+    print()
+
+    # Run verification
+    summary = verifier.run_verification(config)
+
+    # Generate report
+    report = verifier.generate_report(summary, detailed=args.detailed)
+    print(report)
+
+    # Save report if requested
+    if args.output:
+        verifier.save_report(summary, args.output, detailed=args.detailed)
+        print(f"\nReport saved to: {args.output}")
+
+    # Save JSON summary if requested
+    if args.json_output:
+        json_data = {
+            'run_id': summary.run_id,
+            'timestamp': summary.timestamp,
+            'total_tasks': summary.total_tasks,
+            'tasks_verified': summary.tasks_verified,
+            'tasks_passed': summary.tasks_passed,
+            'tasks_failed': summary.tasks_failed,
+            'avg_precision': summary.avg_precision,
+            'avg_recall': summary.avg_recall,
+            'avg_f1_score': summary.avg_f1_score,
+            'avg_ordering_accuracy': summary.avg_ordering_accuracy,
+            'notebooks_tested': summary.notebooks_tested,
+            'skills_tested': summary.skills_tested,
+            'skills_not_tested': summary.skills_not_tested,
+            'category_metrics': summary.category_metrics,
+            'difficulty_metrics': summary.difficulty_metrics,
+            'passed_criteria': summary.passed_criteria(),
+            'failed_tasks': summary.failed_tasks,
+        }
+
+        with open(args.json_output, 'w') as f:
+            json.dump(json_data, f, indent=2)
+        print(f"JSON summary saved to: {args.json_output}")
+
+    # Exit with appropriate code
+    if summary.passed_criteria():
+        sys.exit(0)
+    else:
+        sys.exit(1)
+
+
+def cmd_validate(args):
+    """Validate skill descriptions."""
+    print("=" * 80)
+    print("OmicVerse Skills Verifier - Validating Skill Descriptions")
+    print("=" * 80)
+    print()
+
+    # Load skills
+    loader = SkillDescriptionLoader(skills_dir=args.skills_dir)
+    skills = loader.load_all_descriptions()
+
+    print(f"Loaded {len(skills)} skill descriptions")
+    print()
+
+    # Get statistics
+    stats = loader.get_statistics(skills)
+    print("STATISTICS")
+    print("-" * 80)
+    print(f"Total skills: {stats['total_skills']}")
+    print(f"Average tokens: {stats['avg_token_estimate']:.1f}")
+    print(f"Total tokens: {stats['total_token_estimate']}")
+    print(f"Categories: {', '.join(stats['categories'])}")
+    print()
+
+    # Validate descriptions
+    warnings = loader.validate_descriptions(skills)
+
+    if not warnings:
+        print("✅ All skill descriptions passed validation!")
+        print()
+    else:
+        print("WARNINGS")
+        print("-" * 80)
+        issues_count = 0
+        for skill_name, skill_warnings in warnings.items():
+            print(f"\n{skill_name}:")
+            for warning in skill_warnings:
+                print(f"  ⚠️  {warning}")
+                issues_count += 1
+
+        print()
+        print(f"Total issues found: {issues_count}")
+        print()
+
+    # Quality check if requested
+    if args.check_quality:
+        print("QUALITY METRICS")
+        print("-" * 80)
+
+        checker = create_quality_checker()
+        results = checker.check_all_skills(skills)
+
+        for skill_name, metrics in results.items():
+            score_emoji = "✅" if metrics.overall_score >= 0.8 else "⚠️" if metrics.overall_score >= 0.6 else "❌"
+            print(f"{score_emoji} {skill_name}: {metrics.overall_score:.2f}")
+            if args.detailed:
+                print(f"   Completeness: {metrics.completeness_score:.2f}")
+                print(f"   Clarity: {metrics.clarity_score:.2f}")
+                if metrics.recommendations:
+                    print(f"   Recommendations:")
+                    for rec in metrics.recommendations:
+                        print(f"     - {rec}")
+
+        summary = checker.get_quality_summary(skills)
+        print()
+        print(f"Average score: {summary['avg_overall_score']:.2f}")
+        print(f"Skills needing improvement: {summary['skills_needing_improvement']}")
+
+    # Exit with appropriate code
+    sys.exit(0 if not warnings else 1)
+
+
+def cmd_extract(args):
+    """Extract tasks from notebooks."""
+    print("=" * 80)
+    print("OmicVerse Skills Verifier - Extracting Tasks")
+    print("=" * 80)
+    print()
+
+    # Create extractor
+    extractor = create_task_extractor()
+
+    # Extract tasks
+    if args.notebook:
+        # Single notebook
+        print(f"Extracting tasks from: {args.notebook}")
+        tasks = extractor.extract_from_notebook(args.notebook)
+    else:
+        # Directory
+        print(f"Extracting tasks from directory: {args.directory}")
+        print(f"Pattern: {args.pattern}")
+        tasks = extractor.extract_from_directory(args.directory, args.pattern)
+
+    print(f"Found {len(tasks)} tasks")
+    print()
+
+    # Show tasks
+    if args.detailed:
+        print("TASKS")
+        print("-" * 80)
+        for task in tasks:
+            print(f"\nTask ID: {task.task_id}")
+            print(f"Notebook: {task.notebook_path}")
+            print(f"Description: {task.task_description}")
+            print(f"Expected skills: {', '.join(task.expected_skills)}")
+            print(f"Category: {task.category}")
+            print(f"Difficulty: {task.difficulty}")
+
+    # Show coverage if skills provided
+    if args.show_coverage:
+        loader = SkillDescriptionLoader(skills_dir=args.skills_dir)
+        skills = loader.load_all_descriptions()
+
+        stats = extractor.get_coverage_statistics(tasks, skills)
+
+        print("COVERAGE STATISTICS")
+        print("-" * 80)
+        print(f"Total tasks: {stats['total_tasks']}")
+        print(f"Total notebooks: {stats['total_notebooks']}")
+        print(f"Skills covered: {stats['skills_covered']}/{stats['skills_covered'] + stats['skills_not_covered']}")
+        print(f"Coverage: {stats['coverage_percentage']:.1f}%")
+
+        if stats['not_covered_skills']:
+            print(f"\nSkills not covered:")
+            for skill in stats['not_covered_skills']:
+                print(f"  - {skill}")
+
+    # Save to JSON if requested
+    if args.output:
+        extractor.save_tasks_to_json(tasks, args.output)
+        print(f"\nTasks saved to: {args.output}")
+
+    sys.exit(0)
+
+
+def cmd_test_selection(args):
+    """Test LLM skill selection for a task."""
+    print("=" * 80)
+    print("OmicVerse Skills Verifier - Testing Skill Selection")
+    print("=" * 80)
+    print()
+
+    # Load skills
+    loader = SkillDescriptionLoader(skills_dir=args.skills_dir)
+    skills = loader.load_all_descriptions()
+
+    print(f"Loaded {len(skills)} skills")
+    print()
+
+    # Create selector
+    print(f"Creating LLM selector (model: {args.model})...")
+    selector = create_skill_selector(
+        skill_descriptions=skills,
+        model=args.model,
+        temperature=args.temperature,
+    )
+    print()
+
+    # Get task description
+    task_description = args.task or input("Enter task description: ")
+
+    print(f"Task: {task_description}")
+    print()
+    print("Asking LLM to select skills...")
+    print()
+
+    # Select skills
+    result = selector.select_skills(task_description)
+
+    # Show results
+    print("RESULTS")
+    print("-" * 80)
+    print(f"Selected skills: {', '.join(result.selected_skills) if result.selected_skills else 'None'}")
+    print(f"Skill order: {', '.join(result.skill_order) if result.skill_order else 'N/A'}")
+    print(f"\nReasoning:")
+    print(result.reasoning)
+    print()
+
+    sys.exit(0)
+
+
+def cmd_replay(args):
+    """Replay a stored harness trace as JSON summary."""
+    require_server_only_mode()
+    payload = load_trace_payload(args.trace_id, root=args.trace_root)
+    summary = summarize_trace(payload)
+    if args.full:
+        dump_json(payload, args.output)
+    else:
+        dump_json(summary, args.output)
+    sys.exit(0)
+
+
+def cmd_scenario(args):
+    """Evaluate one stored harness trace against an expected scenario."""
+    require_server_only_mode()
+    payload = run_scenario(
+        args.trace_id,
+        scenario_name=args.name,
+        expected_events=args.expect_event,
+        expected_tools=args.expect_tool,
+        root=args.trace_root,
+    )
+    dump_json(payload, args.output)
+    sys.exit(0 if payload["passed"] else 1)
+
+
+def cmd_cleanup(args):
+    """Generate a cleanup/drift report for harness assets."""
+    require_server_only_mode()
+    payload = run_cleanup(
+        trace_root=args.trace_root,
+        docs_root=args.docs_root,
+        repo_root=args.repo_root,
+        save_report=args.save_report,
+        report_name=args.report_name,
+    )
+    dump_json(payload, args.output)
+    sys.exit(0)
+
+
+def cmd_workflow_show(args):
+    """Show the resolved OVAgent workflow contract."""
+    workflow = load_workflow_document(
+        repo_root=Path(args.repo_root).resolve() if args.repo_root else None,
+        workflow_path=Path(args.workflow_path).resolve() if args.workflow_path else None,
+    )
+    dump_json(workflow.to_dict(), args.output)
+    sys.exit(0)
+
+
+def cmd_workflow_validate(args):
+    """Validate the repo-owned OVAgent workflow contract."""
+    workflow = load_workflow_document(
+        repo_root=Path(args.repo_root).resolve() if args.repo_root else None,
+        workflow_path=Path(args.workflow_path).resolve() if args.workflow_path else None,
+    )
+    issues = workflow.config.validate()
+    payload = workflow.to_dict()
+    payload["issues"] = issues
+    payload["valid"] = not issues
+    dump_json(payload, args.output)
+    sys.exit(0 if not issues else 1)
+
+
+def cmd_run_start(args):
+    """Create a file-backed analysis run manifest."""
+    workflow = load_workflow_document(
+        repo_root=Path(args.repo_root).resolve() if args.repo_root else None,
+        workflow_path=Path(args.workflow_path).resolve() if args.workflow_path else None,
+    )
+    store = RunStore(root=Path(args.run_root).resolve() if args.run_root else None)
+    run = store.start_run(
+        request=args.request,
+        model=args.model,
+        provider=args.provider,
+        session_id=args.session_id or "",
+        workflow=workflow,
+        metadata={"created_via": "verifier_cli"},
+    )
+    dump_json(store.build_bundle(run.run_id), args.output)
+    sys.exit(0)
+
+
+def cmd_run_status(args):
+    """Show the current status of a stored analysis run."""
+    store = RunStore(root=Path(args.run_root).resolve() if args.run_root else None)
+    payload = store.build_bundle(args.run_id) if args.full else store.load_run(args.run_id).to_dict()
+    dump_json(payload, args.output)
+    sys.exit(0)
+
+
+def cmd_run_resume(args):
+    """Mark a run for manual continuation and return the updated manifest."""
+    store = RunStore(root=Path(args.run_root).resolve() if args.run_root else None)
+    run = store.load_run(args.run_id)
+    metadata = dict(run.metadata)
+    metadata["resume_requested_at"] = time.time()
+    if args.note:
+        metadata["resume_note"] = args.note
+    run.metadata = metadata
+    run.updated_at = time.time()
+    store.save_run(run)
+    dump_json(store.build_bundle(run.run_id), args.output)
+    sys.exit(0)
+
+
+def cmd_run_replay(args):
+    """Replay the latest stored trace linked to a run."""
+    require_server_only_mode()
+    store = RunStore(root=Path(args.run_root).resolve() if args.run_root else None)
+    run = store.load_run(args.run_id)
+    if not run.trace_ids:
+        raise ValueError(f"Run {args.run_id} has no linked traces to replay.")
+    trace_id = run.trace_ids[-1]
+    payload = load_trace_payload(trace_id, root=args.trace_root)
+    if args.full:
+        dump_json(payload, args.output)
+    else:
+        dump_json({
+            "run_id": run.run_id,
+            "trace_id": trace_id,
+            "summary": summarize_trace(payload),
+        }, args.output)
+    sys.exit(0)
+
+
+def cmd_run_bundle(args):
+    """Print the proof bundle for a stored run."""
+    store = RunStore(root=Path(args.run_root).resolve() if args.run_root else None)
+    dump_json(store.build_bundle(args.run_id), args.output)
+    sys.exit(0)
+
+
+def main():
+    """Main CLI entry point."""
+    parser = argparse.ArgumentParser(
+        prog='omicverse-verifier',
+        description='OmicVerse Skills Verifier - Test and validate skill selection',
+        epilog='For more information, see omicverse/utils/verifier/README.md'
+    )
+
+    # Global options
+    parser.add_argument(
+        '--skills-dir',
+        type=str,
+        help='Directory containing skill descriptions (default: .claude/skills/)',
+    )
+
+    subparsers = parser.add_subparsers(dest='command', help='Command to run')
+
+    # Verify command
+    verify_parser = subparsers.add_parser(
+        'verify',
+        help='Run end-to-end verification'
+    )
+    verify_parser.add_argument(
+        'notebooks_dir',
+        type=str,
+        help='Directory containing notebooks to verify'
+    )
+    verify_parser.add_argument(
+        '--pattern',
+        type=str,
+        default='**/*.ipynb',
+        help='Glob pattern for finding notebooks (default: **/*.ipynb)'
+    )
+    verify_parser.add_argument(
+        '--model',
+        type=str,
+        default='gpt-4o-mini',
+        help='LLM model to use (default: gpt-4o-mini)'
+    )
+    verify_parser.add_argument(
+        '--temperature',
+        type=float,
+        default=0.0,
+        help='LLM temperature (default: 0.0)'
+    )
+    verify_parser.add_argument(
+        '--max-concurrent',
+        type=int,
+        default=5,
+        help='Maximum concurrent tasks (default: 5)'
+    )
+    verify_parser.add_argument(
+        '--skip',
+        type=str,
+        nargs='+',
+        help='Notebook names to skip'
+    )
+    verify_parser.add_argument(
+        '--categories',
+        type=str,
+        nargs='+',
+        help='Only verify these categories (e.g., bulk single-cell)'
+    )
+    verify_parser.add_argument(
+        '--detailed',
+        action='store_true',
+        help='Generate detailed report'
+    )
+    verify_parser.add_argument(
+        '--output',
+        type=str,
+        help='Save report to file'
+    )
+    verify_parser.add_argument(
+        '--json-output',
+        type=str,
+        help='Save JSON summary to file'
+    )
+    verify_parser.set_defaults(func=cmd_verify)
+
+    # Validate command
+    validate_parser = subparsers.add_parser(
+        'validate',
+        help='Validate skill descriptions'
+    )
+    validate_parser.add_argument(
+        '--check-quality',
+        action='store_true',
+        help='Check quality metrics for descriptions'
+    )
+    validate_parser.add_argument(
+        '--detailed',
+        action='store_true',
+        help='Show detailed quality metrics'
+    )
+    validate_parser.set_defaults(func=cmd_validate)
+
+    # Extract command
+    extract_parser = subparsers.add_parser(
+        'extract',
+        help='Extract tasks from notebooks'
+    )
+    extract_group = extract_parser.add_mutually_exclusive_group(required=True)
+    extract_group.add_argument(
+        '--notebook',
+        type=str,
+        help='Single notebook to extract from'
+    )
+    extract_group.add_argument(
+        '--directory',
+        type=str,
+        help='Directory of notebooks to extract from'
+    )
+    extract_parser.add_argument(
+        '--pattern',
+        type=str,
+        default='**/*.ipynb',
+        help='Glob pattern for finding notebooks (default: **/*.ipynb)'
+    )
+    extract_parser.add_argument(
+        '--detailed',
+        action='store_true',
+        help='Show detailed task information'
+    )
+    extract_parser.add_argument(
+        '--show-coverage',
+        action='store_true',
+        help='Show coverage statistics'
+    )
+    extract_parser.add_argument(
+        '--output',
+        type=str,
+        help='Save tasks to JSON file'
+    )
+    extract_parser.set_defaults(func=cmd_extract)
+
+    # Test selection command
+    test_parser = subparsers.add_parser(
+        'test-selection',
+        help='Test LLM skill selection for a task'
+    )
+    test_parser.add_argument(
+        '--task',
+        type=str,
+        help='Task description (will prompt if not provided)'
+    )
+    test_parser.add_argument(
+        '--model',
+        type=str,
+        default='gpt-4o-mini',
+        help='LLM model to use (default: gpt-4o-mini)'
+    )
+    test_parser.add_argument(
+        '--temperature',
+        type=float,
+        default=0.0,
+        help='LLM temperature (default: 0.0)'
+    )
+    test_parser.set_defaults(func=cmd_test_selection)
+
+    # Harness replay command
+    replay_parser = subparsers.add_parser(
+        'replay',
+        help='Replay or summarize a stored OVAgent harness trace (server-only)'
+    )
+    replay_parser.add_argument(
+        'trace_id',
+        type=str,
+        help='Harness trace identifier (e.g. trace_xxxxx)'
+    )
+    replay_parser.add_argument(
+        '--trace-root',
+        type=str,
+        help='Override trace store root directory'
+    )
+    replay_parser.add_argument(
+        '--full',
+        action='store_true',
+        help='Print the full stored trace payload instead of a summary'
+    )
+    replay_parser.add_argument(
+        '--output',
+        type=str,
+        help='Optional JSON output path'
+    )
+    replay_parser.set_defaults(func=cmd_replay)
+
+    # Harness scenario command
+    scenario_parser = subparsers.add_parser(
+        'scenario',
+        help='Evaluate a stored harness trace against expected events/tools (server-only)'
+    )
+    scenario_parser.add_argument(
+        'trace_id',
+        type=str,
+        help='Harness trace identifier to evaluate'
+    )
+    scenario_parser.add_argument(
+        '--name',
+        type=str,
+        default='adhoc-scenario',
+        help='Scenario name (default: adhoc-scenario)'
+    )
+    scenario_parser.add_argument(
+        '--expect-event',
+        type=str,
+        nargs='*',
+        help='Expected harness event types'
+    )
+    scenario_parser.add_argument(
+        '--expect-tool',
+        type=str,
+        nargs='*',
+        help='Expected tool names'
+    )
+    scenario_parser.add_argument(
+        '--trace-root',
+        type=str,
+        help='Override trace store root directory'
+    )
+    scenario_parser.add_argument(
+        '--output',
+        type=str,
+        help='Optional JSON output path'
+    )
+    scenario_parser.set_defaults(func=cmd_scenario)
+
+    # Harness cleanup command
+    cleanup_parser = subparsers.add_parser(
+        'cleanup',
+        help='Generate a harness cleanup/drift report (server-only)'
+    )
+    cleanup_parser.add_argument(
+        '--trace-root',
+        type=str,
+        help='Override trace store root directory'
+    )
+    cleanup_parser.add_argument(
+        '--docs-root',
+        type=str,
+        help='Override docs/harness root directory'
+    )
+    cleanup_parser.add_argument(
+        '--repo-root',
+        type=str,
+        help='Override repository root'
+    )
+    cleanup_parser.add_argument(
+        '--save-report',
+        action='store_true',
+        help='Persist the cleanup report under the trace store reports directory'
+    )
+    cleanup_parser.add_argument(
+        '--report-name',
+        type=str,
+        default='cleanup_report',
+        help='Report filename prefix when --save-report is used'
+    )
+    cleanup_parser.add_argument(
+        '--output',
+        type=str,
+        help='Optional JSON output path'
+    )
+    cleanup_parser.set_defaults(func=cmd_cleanup)
+
+    # Workflow commands
+    workflow_parser = subparsers.add_parser(
+        'workflow',
+        help='Inspect the repo-owned OVAgent workflow contract'
+    )
+    workflow_subparsers = workflow_parser.add_subparsers(dest='workflow_command')
+
+    workflow_show_parser = workflow_subparsers.add_parser(
+        'show',
+        help='Show the resolved workflow document'
+    )
+    workflow_show_parser.add_argument(
+        '--repo-root',
+        type=str,
+        help='Repository root containing WORKFLOW.md'
+    )
+    workflow_show_parser.add_argument(
+        '--workflow-path',
+        type=str,
+        help='Explicit WORKFLOW.md path'
+    )
+    workflow_show_parser.add_argument(
+        '--output',
+        type=str,
+        help='Optional JSON output path'
+    )
+    workflow_show_parser.set_defaults(func=cmd_workflow_show)
+
+    workflow_validate_parser = workflow_subparsers.add_parser(
+        'validate',
+        help='Validate the resolved workflow document'
+    )
+    workflow_validate_parser.add_argument(
+        '--repo-root',
+        type=str,
+        help='Repository root containing WORKFLOW.md'
+    )
+    workflow_validate_parser.add_argument(
+        '--workflow-path',
+        type=str,
+        help='Explicit WORKFLOW.md path'
+    )
+    workflow_validate_parser.add_argument(
+        '--output',
+        type=str,
+        help='Optional JSON output path'
+    )
+    workflow_validate_parser.set_defaults(func=cmd_workflow_validate)
+
+    # Analysis run commands
+    run_parser = subparsers.add_parser(
+        'run',
+        help='Create and inspect file-backed OVAgent analysis runs'
+    )
+    run_subparsers = run_parser.add_subparsers(dest='run_command')
+
+    run_start_parser = run_subparsers.add_parser(
+        'start',
+        help='Create a new analysis run manifest'
+    )
+    run_start_parser.add_argument(
+        'request',
+        type=str,
+        help='Analysis task description'
+    )
+    run_start_parser.add_argument(
+        '--model',
+        type=str,
+        default='gpt-5.2',
+        help='Model name to record with the run'
+    )
+    run_start_parser.add_argument(
+        '--provider',
+        type=str,
+        default='openai',
+        help='Provider name to record with the run'
+    )
+    run_start_parser.add_argument(
+        '--session-id',
+        type=str,
+        help='Optional runtime session identifier'
+    )
+    run_start_parser.add_argument(
+        '--repo-root',
+        type=str,
+        help='Repository root containing WORKFLOW.md'
+    )
+    run_start_parser.add_argument(
+        '--workflow-path',
+        type=str,
+        help='Explicit WORKFLOW.md path'
+    )
+    run_start_parser.add_argument(
+        '--run-root',
+        type=str,
+        help='Override run store root directory'
+    )
+    run_start_parser.add_argument(
+        '--output',
+        type=str,
+        help='Optional JSON output path'
+    )
+    run_start_parser.set_defaults(func=cmd_run_start)
+
+    run_status_parser = run_subparsers.add_parser(
+        'status',
+        help='Show the status of a stored analysis run'
+    )
+    run_status_parser.add_argument('run_id', type=str, help='Analysis run identifier')
+    run_status_parser.add_argument('--run-root', type=str, help='Override run store root directory')
+    run_status_parser.add_argument('--full', action='store_true', help='Show bundle paths and manifest')
+    run_status_parser.add_argument('--output', type=str, help='Optional JSON output path')
+    run_status_parser.set_defaults(func=cmd_run_status)
+
+    run_resume_parser = run_subparsers.add_parser(
+        'resume',
+        help='Mark an analysis run for manual continuation'
+    )
+    run_resume_parser.add_argument('run_id', type=str, help='Analysis run identifier')
+    run_resume_parser.add_argument('--run-root', type=str, help='Override run store root directory')
+    run_resume_parser.add_argument('--note', type=str, help='Optional operator note')
+    run_resume_parser.add_argument('--output', type=str, help='Optional JSON output path')
+    run_resume_parser.set_defaults(func=cmd_run_resume)
+
+    run_replay_parser = run_subparsers.add_parser(
+        'replay',
+        help='Replay the latest trace linked to a run (server-only)'
+    )
+    run_replay_parser.add_argument('run_id', type=str, help='Analysis run identifier')
+    run_replay_parser.add_argument('--run-root', type=str, help='Override run store root directory')
+    run_replay_parser.add_argument('--trace-root', type=str, help='Override trace store root directory')
+    run_replay_parser.add_argument('--full', action='store_true', help='Show the full stored trace')
+    run_replay_parser.add_argument('--output', type=str, help='Optional JSON output path')
+    run_replay_parser.set_defaults(func=cmd_run_replay)
+
+    run_bundle_parser = run_subparsers.add_parser(
+        'bundle',
+        help='Show the proof bundle for a stored analysis run'
+    )
+    run_bundle_parser.add_argument('run_id', type=str, help='Analysis run identifier')
+    run_bundle_parser.add_argument('--run-root', type=str, help='Override run store root directory')
+    run_bundle_parser.add_argument('--output', type=str, help='Optional JSON output path')
+    run_bundle_parser.set_defaults(func=cmd_run_bundle)
+
+    # Parse and execute
+    args = parser.parse_args()
+
+    if not hasattr(args, 'func'):
+        parser.print_help()
+        sys.exit(1)
+
+    try:
+        args.func(args)
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n❌ Error: {e}", file=sys.stderr)
+        import traceback
+        if '--debug' in sys.argv:
+            traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

@@ -3,11 +3,16 @@
 bulk分析顶层导航界面UI布局脚本 - 只负责创建控件、规划窗口布局、摆放按钮/输入框/画布、设置样式尺寸
 完全不写按钮点击、触发逻辑
 
-仿作主界面GUI，风格追溯到style和mod_manage
+采用左侧导航栏+右侧内容面板的布局风格
 """
 
 from script.utils_layer.import_config import *
-from script.utils_layer.gui_styles import get_mod_styles, get_mod_paths, get_stylesheet_for_widget, get_font_for_widget, create_styled_button, create_styled_combo_box, create_styled_slider, create_styled_panel, create_styled_text_edit
+from script.utils_layer.gui_styles import (
+    get_mod_styles, get_mod_paths, get_stylesheet_for_widget, get_font_for_widget,
+    create_styled_button, create_styled_combo_box, create_styled_panel, create_styled_text_edit,
+    create_navigation_panel, create_navigation_button, create_navigation_divider, create_navigation_header,
+    create_styled_image_button
+)
 from script.mods_layer.mod_manager import global_mod_manager
 from script.utils_layer.page_intersect import page_intersect
 
@@ -37,16 +42,16 @@ class BulkTopPageUI:
         
         button_style = get_stylesheet_for_widget('button')
         for child in self.bulk_top_page.findChildren(QPushButton):
-            if child in [self.btn_select_path, self.btn_load]:
+            if child in [self.btn_select_path, self.btn_load] and hasattr(self, 'btn_select_path'):
+                continue
+            nav_buttons = [getattr(self, attr) for attr in dir(self) if attr.startswith('nav_btn_')]
+            if child in nav_buttons:
                 continue
             child.setStyleSheet(button_style)
         
-        self.btn_select_path.setStyleSheet(get_stylesheet_for_widget('import_button'))
-        self.btn_load.setStyleSheet(get_stylesheet_for_widget('import_button'))
-        
-        slider_style = get_stylesheet_for_widget('slider')
-        for child in self.bulk_top_page.findChildren(QSlider):
-            child.setStyleSheet(slider_style)
+        if hasattr(self, 'btn_select_path'):
+            self.btn_select_path.setStyleSheet(get_stylesheet_for_widget('import_button'))
+            self.btn_load.setStyleSheet(get_stylesheet_for_widget('import_button'))
         
         label_style = get_stylesheet_for_widget('label')
         for child in self.bulk_top_page.findChildren(QLabel):
@@ -74,6 +79,218 @@ class BulkTopPageUI:
             if child.objectName() and child.objectName().startswith("styled_panel"):
                 child.setStyleSheet(panel_style)
 
+    def _create_data_load_panel(self, parent):
+        """创建数据加载面板内容"""
+        panel, layout = create_styled_panel(parent=parent)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        styles = get_mod_styles()
+        subtitle_font = styles.get('sub_text_font', '幼圆')
+        subtitle_font_size = styles.get('subtitle_font_size', 16)
+        subtitle_color = styles.get('sub_text_color', '#87CEEB')
+        
+        title_label = QLabel("数据加载")
+        title_label.setFont(QFont(subtitle_font, subtitle_font_size, QFont.Bold))
+        title_label.setStyleSheet(f"color: {subtitle_color}; background: transparent;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        layout.addSpacing(20)
+        
+        mutant_color = styles.get('sub_mutant_color', styles.get('mutant_color', '#FF6B35'))
+        
+        status_title = QLabel("运行状态")
+        status_title.setFont(QFont(subtitle_font, 14, QFont.Bold))
+        status_title.setStyleSheet(f"color: {mutant_color}; background: transparent;")
+        status_title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(status_title)
+        
+        self.status_text = create_styled_text_edit(read_only=True)
+        self.status_text.setMaximumHeight(100)
+        self.status_text.setFont(get_font_for_widget('label', 10))
+        self.status_text.setText("等待数据加载...")
+        layout.addWidget(self.status_text)
+        
+        layout.addSpacing(30)
+        
+        self.btn_select_path = create_styled_button("扫描数据路径", font_size=14, button_type='import', parent=panel)
+        layout.addWidget(self.btn_select_path, alignment=Qt.AlignCenter)
+        
+        layout.addSpacing(20)
+        
+        self.h5ad_combo = create_styled_combo_box(parent=panel)
+        self.h5ad_combo.setMinimumWidth(300)
+        layout.addWidget(self.h5ad_combo, alignment=Qt.AlignCenter)
+        
+        layout.addSpacing(20)
+        
+        self.btn_load = create_styled_button("加载数据集", font_size=14, button_type='import', parent=panel)
+        layout.addWidget(self.btn_load, alignment=Qt.AlignCenter)
+        
+        layout.addStretch()
+        
+        return panel
+
+    def _create_analysis_panel(self, parent):
+        """创建分析方法面板内容"""
+        panel, layout = create_styled_panel(parent=parent)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        styles = get_mod_styles()
+        subtitle_font = styles.get('sub_text_font', '幼圆')
+        subtitle_font_size = styles.get('subtitle_font_size', 16)
+        mutant_color = styles.get('sub_mutant_color', styles.get('mutant_color', '#FF6B35'))
+        
+        title_label = QLabel("分析工具")
+        title_label.setFont(QFont(subtitle_font, subtitle_font_size, QFont.Bold))
+        title_label.setStyleSheet(f"color: {mutant_color}; background: transparent;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        layout.addSpacing(30)
+        
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(20)
+        columns_layout.setContentsMargins(40, 0, 40, 0)
+        
+        btn_font_size = styles.get('button_font_size', 14)
+        
+        col1, col1_layout = create_styled_panel(variant='sub')
+        col1_layout.setContentsMargins(15, 15, 15, 15)
+        col1_layout.setSpacing(10)
+        self.btn_expression = create_styled_button("表达量分析", font_size=btn_font_size, parent=col1)
+        col1_layout.addWidget(self.btn_expression, alignment=Qt.AlignCenter)
+        columns_layout.addWidget(col1)
+        
+        col2, col2_layout = create_styled_panel(variant='sub')
+        col2_layout.setContentsMargins(15, 15, 15, 15)
+        col2_layout.setSpacing(10)
+        self.btn_corre = create_styled_button("相关性分析", font_size=btn_font_size, parent=col2)
+        col2_layout.addWidget(self.btn_corre, alignment=Qt.AlignCenter)
+        columns_layout.addWidget(col2)
+        
+        col3, col3_layout = create_styled_panel(variant='sub')
+        col3_layout.setContentsMargins(15, 15, 15, 15)
+        col3_layout.setSpacing(10)
+        columns_layout.addWidget(col3)
+        
+        col4, col4_layout = create_styled_panel(variant='sub')
+        col4_layout.setContentsMargins(15, 15, 15, 15)
+        col4_layout.setSpacing(10)
+        self.btn_km = create_styled_button("生存分析", font_size=btn_font_size, parent=col4)
+        col4_layout.addWidget(self.btn_km, alignment=Qt.AlignCenter)
+        self.btn_cluster = create_styled_button("一致性分析", font_size=btn_font_size, parent=col4)
+        col4_layout.addWidget(self.btn_cluster, alignment=Qt.AlignCenter)
+        self.btn_immune = create_styled_button("bulk免疫分析", font_size=btn_font_size, parent=col4)
+        col4_layout.addWidget(self.btn_immune, alignment=Qt.AlignCenter)
+        columns_layout.addWidget(col4)
+        
+        layout.addLayout(columns_layout)
+        
+        layout.addStretch()
+        
+        return panel
+
+    def _create_genelist_panel(self, parent):
+        """创建基因列表类面板内容"""
+        panel, layout = create_styled_panel(parent=parent)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        styles = get_mod_styles()
+        subtitle_font = styles.get('sub_text_font', '幼圆')
+        subtitle_font_size = styles.get('subtitle_font_size', 16)
+        mutant_color = styles.get('sub_mutant_color', styles.get('mutant_color', '#FF6B35'))
+        
+        title_label = QLabel("基因列表类")
+        title_label.setFont(QFont(subtitle_font, subtitle_font_size, QFont.Bold))
+        title_label.setStyleSheet(f"color: {mutant_color}; background: transparent;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        layout.addSpacing(30)
+        
+        btn_font_size = styles.get('button_font_size', 14)
+        paths = get_mod_paths()
+        pics_path = paths.get('PICS_PATH', 'appdata/elements/page_pics')
+        
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(15)
+        columns_layout.setContentsMargins(20, 0, 20, 0)
+        
+        self.btn_cox = create_styled_image_button("Cox分析", os.path.join(pics_path, 'bulk_cox_layer.png'), parent=panel, font_size=btn_font_size)
+        columns_layout.addWidget(self.btn_cox, alignment=Qt.AlignCenter)
+        
+        self.btn_diff = create_styled_image_button("差异分析", os.path.join(pics_path, 'bulk_diff_layer.png'), parent=panel, font_size=btn_font_size)
+        columns_layout.addWidget(self.btn_diff, alignment=Qt.AlignCenter)
+        
+        self.btn_logrank = create_styled_image_button("Log-rank分析", os.path.join(pics_path, 'bulk_logrank_layer.png'), parent=panel, font_size=btn_font_size)
+        columns_layout.addWidget(self.btn_logrank, alignment=Qt.AlignCenter)
+        
+        self.btn_wgcna = create_styled_image_button("WGCNA分析", os.path.join(pics_path, 'wgcna_layer.png'), parent=panel, font_size=btn_font_size)
+        columns_layout.addWidget(self.btn_wgcna, alignment=Qt.AlignCenter)
+        
+        layout.addLayout(columns_layout)
+        
+        layout.addStretch()
+        
+        return panel
+
+    def _create_other_panel(self, parent):
+        """创建其他分析类面板内容"""
+        panel, layout = create_styled_panel(parent=parent)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        styles = get_mod_styles()
+        subtitle_font = styles.get('sub_text_font', '幼圆')
+        subtitle_font_size = styles.get('subtitle_font_size', 16)
+        mutant_color = styles.get('sub_mutant_color', styles.get('mutant_color', '#FF6B35'))
+        
+        title_label = QLabel("其他分析类")
+        title_label.setFont(QFont(subtitle_font, subtitle_font_size, QFont.Bold))
+        title_label.setStyleSheet(f"color: {mutant_color}; background: transparent;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        layout.addSpacing(30)
+        
+        btn_font_size = styles.get('button_font_size', 14)
+        
+        col1, col1_layout = create_styled_panel(variant='sub')
+        col1_layout.setContentsMargins(15, 15, 15, 15)
+        col1_layout.setSpacing(10)
+        self.btn_gdsc_drug_sensitivity = create_styled_button("GDSC药物敏感性分析", font_size=btn_font_size, parent=col1)
+        col1_layout.addWidget(self.btn_gdsc_drug_sensitivity, alignment=Qt.AlignCenter)
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(15)
+        columns_layout.setContentsMargins(20, 0, 20, 0)
+        columns_layout.addWidget(col1)
+        
+        layout.addLayout(columns_layout)
+        
+        layout.addStretch()
+        
+        return panel
+
+    def show_panel(self, panel_name):
+        """显示指定面板，隐藏其他面板（带淡入效果）"""
+        for name, panel in self.panels.items():
+            if name == panel_name:
+                panel.show()
+                panel.raise_()
+                self._fade_in(panel)
+            else:
+                panel.hide()
+        
+        for attr in dir(self):
+            if attr.startswith('nav_btn_'):
+                btn = getattr(self, attr)
+                btn.setChecked(attr == f'nav_btn_{panel_name}')
+
+    def _fade_in(self, widget):
+        """淡入动画效果"""
+        widget.setWindowOpacity(1)
+        widget.show()
+
     def create_page(self):
         self.bulk_top_page = QWidget(self.parent)
         
@@ -97,21 +314,64 @@ class BulkTopPageUI:
         overlay.setGeometry(0, 0, self.screen_width, self.screen_height)
         overlay.setStyleSheet(f"background: {styles.get('overlay_background', styles.get('sub_fill_color', 'rgba(26, 26, 46, 0.3)'))};")
         
-        layout = QVBoxLayout(overlay)
-        layout.setContentsMargins(20, 20, 20, 20)
+        main_layout = QHBoxLayout(overlay)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        title_panel, title_layout = create_styled_panel()
-        top_layout = QHBoxLayout()
+        nav_panel, nav_layout = create_navigation_panel(parent=overlay, fixed_width=220)
         
-        self.btn_back_bulk = create_styled_button("← 返回主页", font_size=12)
-        top_layout.addWidget(self.btn_back_bulk)
+        self.nav_btn_back = create_navigation_button("← 返回主界面", font_size=13, parent=nav_panel)
+        nav_layout.addWidget(self.nav_btn_back)
+        
+        nav_layout.addSpacing(10)
+        
+        nav_layout.addWidget(create_navigation_divider(parent=nav_panel))
+        
+        nav_layout.addSpacing(10)
+        
+        nav_layout.addWidget(create_navigation_header("数据管理", font_size=11, parent=nav_panel))
+        
+        self.nav_btn_data = create_navigation_button("加载数据", font_size=13, parent=nav_panel)
+        nav_layout.addWidget(self.nav_btn_data)
+        
+        nav_layout.addSpacing(10)
+        
+        nav_layout.addWidget(create_navigation_divider(parent=nav_panel))
+        
+        nav_layout.addSpacing(10)
+        
+        nav_layout.addWidget(create_navigation_header("分析方法", font_size=11, parent=nav_panel))
+        
+        self.nav_btn_analysis = create_navigation_button("分析工具", font_size=13, parent=nav_panel)
+        nav_layout.addWidget(self.nav_btn_analysis)
+        
+        self.nav_btn_genelist = create_navigation_button("基因列表类", font_size=13, parent=nav_panel)
+        nav_layout.addWidget(self.nav_btn_genelist)
+        
+        self.nav_btn_other = create_navigation_button("其他分析类", font_size=13, parent=nav_panel)
+        nav_layout.addWidget(self.nav_btn_other)
+        
+        nav_layout.addStretch()
+        
+        main_layout.addWidget(nav_panel)
+        
+        content_panel = QWidget(overlay)
+        content_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        content_layout = QVBoxLayout(content_panel)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        
+        top_bar, top_bar_layout = create_styled_panel(parent=content_panel)
+        top_bar_layout.setContentsMargins(15, 8, 15, 8)
+        
+        title_row_layout = QHBoxLayout()
         
         title_label = QLabel("Bulk分析")
         title_label.setObjectName("bulk_top_title")
-        title_label.setFont(get_font_for_widget('button', 32, bold=True))
+        title_label.setFont(get_font_for_widget('button', 24, bold=True))
         title_label.setStyleSheet(f"color: {styles.get('sub_mutant_color', styles.get('mutant_color', '#FF6B35'))};")
         title_label.setAlignment(Qt.AlignCenter)
-        top_layout.addWidget(title_label)
+        title_row_layout.addWidget(title_label)
         
         MusicControllerClass = global_mod_manager.get_current_mod().get_music_controller_class()
         mod_instance = global_mod_manager.get_current_mod()
@@ -121,117 +381,41 @@ class BulkTopPageUI:
         music_container_height = styles.get('music_container_height', 50)
         music_container = self.music_controller.create_music_controls(music_container_width, music_container_height, variant='sub')
         
-        music_container_x = styles.get('music_container_x', 0.85)
-        music_container_y = styles.get('music_container_y', 15)
-        if isinstance(music_container_x, float):
-            music_container_x = int(self.screen_width * music_container_x)
-        music_container.move(music_container_x, music_container_y)
+        title_row_layout.addWidget(music_container)
         
-        top_layout.addWidget(music_container)
+        title_row_layout.setStretch(0, 5)
+        title_row_layout.setStretch(1, 1)
         
-        top_layout.setStretch(0, 1)
-        top_layout.setStretch(1, 3)
-        top_layout.setStretch(2, 1)
+        top_bar_layout.addLayout(title_row_layout)
         
-        title_layout.addLayout(top_layout)
-        layout.addWidget(title_panel)
+        content_layout.addWidget(top_bar)
         
-        main_content_layout = QHBoxLayout()
+        panels_container = QWidget(content_panel)
+        panels_layout = QVBoxLayout(panels_container)
+        panels_layout.setContentsMargins(20, 20, 20, 20)
         
-        left_panel, left_layout = create_styled_panel(fixed_width=220)
+        self.data_panel = self._create_data_load_panel(panels_container)
+        self.analysis_panel = self._create_analysis_panel(panels_container)
+        self.genelist_panel = self._create_genelist_panel(panels_container)
+        self.other_panel = self._create_other_panel(panels_container)
         
-        subtitle_font = styles.get('sub_text_font', '幼圆')
-        subtitle_font_size = styles.get('subtitle_font_size', 14)
-        subtitle_color = styles.get('sub_text_color', '#87CEEB')
+        self.panels = {
+            'data': self.data_panel,
+            'analysis': self.analysis_panel,
+            'genelist': self.genelist_panel,
+            'other': self.other_panel
+        }
         
-        data_title = QLabel("数据加载")
-        data_title.setFont(QFont(subtitle_font, subtitle_font_size, QFont.Bold))
-        data_title.setStyleSheet(f"color: {subtitle_color}; background: transparent;")
-        data_title.setAlignment(Qt.AlignCenter)
-        left_layout.addWidget(data_title)
+        panels_layout.addWidget(self.data_panel)
+        panels_layout.addWidget(self.analysis_panel)
+        panels_layout.addWidget(self.genelist_panel)
+        panels_layout.addWidget(self.other_panel)
         
-        self.btn_select_path = create_styled_button("扫描数据路径", font_size=12, button_type='import', parent=left_panel)
-        left_layout.addWidget(self.btn_select_path)
+        content_layout.addWidget(panels_container)
         
-        self.h5ad_combo = create_styled_combo_box(parent=left_panel)
-        self.h5ad_combo.setMinimumWidth(180)
-        left_layout.addWidget(self.h5ad_combo)
+        main_layout.addWidget(content_panel)
         
-        self.btn_load = create_styled_button("加载数据集", font_size=12, button_type='import', parent=left_panel)
-        left_layout.addWidget(self.btn_load)
-        
-        left_layout.addSpacing(15)
-        
-        status_title = QLabel("运行状态")
-        status_title.setFont(QFont(subtitle_font, 12, QFont.Bold))
-        status_title.setStyleSheet(f"color: {subtitle_color}; background: transparent;")
-        status_title.setAlignment(Qt.AlignCenter)
-        left_layout.addWidget(status_title)
-        
-        self.status_text = create_styled_text_edit(read_only=True)
-        self.status_text.setMaximumHeight(100)
-        self.status_text.setFont(get_font_for_widget('label', 10))
-        self.status_text.setText("等待数据加载...")
-        left_layout.addWidget(self.status_text)
-        
-        left_layout.addStretch()
-        main_content_layout.addWidget(left_panel)
-        
-        analysis_panel, analysis_layout = create_styled_panel()
-        analysis_layout.setContentsMargins(8, 8, 8, 8)
-        analysis_layout.setSpacing(5)
-        
-        analysis_title = QLabel("分析工具")
-        analysis_title.setFont(QFont(subtitle_font, subtitle_font_size, QFont.Bold))
-        analysis_title.setStyleSheet(f"color: {subtitle_color}; background: transparent;")
-        analysis_title.setAlignment(Qt.AlignCenter)
-        analysis_title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        analysis_layout.addWidget(analysis_title)
-        
-        columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(10)
-        
-        btn_font_size = styles.get('button_font_size', 14)
-        
-        col1, col1_layout = create_styled_panel(variant='sub')
-        col1_layout.setContentsMargins(8, 8, 8, 8)
-        col1_layout.setSpacing(5)
-        self.btn_expression = create_styled_button("表达量分析", font_size=btn_font_size, parent=col1)
-        col1_layout.addWidget(self.btn_expression, alignment=Qt.AlignCenter)
-        columns_layout.addWidget(col1)
-        
-        col2, col2_layout = create_styled_panel(variant='sub')
-        col2_layout.setContentsMargins(8, 8, 8, 8)
-        col2_layout.setSpacing(5)
-        self.btn_corre = create_styled_button("相关性分析", font_size=btn_font_size, parent=col2)
-        col2_layout.addWidget(self.btn_corre, alignment=Qt.AlignCenter)
-        columns_layout.addWidget(col2)
-        
-        col3, col3_layout = create_styled_panel(variant='sub')
-        col3_layout.setContentsMargins(8, 8, 8, 8)
-        col3_layout.setSpacing(5)
-        self.btn_cox = create_styled_button("Cox分析", font_size=btn_font_size, parent=col3)
-        col3_layout.addWidget(self.btn_cox, alignment=Qt.AlignCenter)
-        columns_layout.addWidget(col3)
-        
-        col4, col4_layout = create_styled_panel(variant='sub')
-        col4_layout.setContentsMargins(8, 8, 8, 8)
-        col4_layout.setSpacing(5)
-        self.btn_km = create_styled_button("生存分析", font_size=btn_font_size, parent=col4)
-        col4_layout.addWidget(self.btn_km, alignment=Qt.AlignCenter)
-        self.btn_cluster = create_styled_button("一致性分析", font_size=btn_font_size, parent=col4)
-        col4_layout.addWidget(self.btn_cluster, alignment=Qt.AlignCenter)
-        self.btn_wgcna = create_styled_button("WGCNA分析", font_size=btn_font_size, parent=col4)
-        col4_layout.addWidget(self.btn_wgcna, alignment=Qt.AlignCenter)
-        self.btn_immune = create_styled_button("bulk免疫分析", font_size=btn_font_size, parent=col4)
-        col4_layout.addWidget(self.btn_immune, alignment=Qt.AlignCenter)
-        columns_layout.addWidget(col4)
-        
-        analysis_layout.addLayout(columns_layout)
-        
-        main_content_layout.addWidget(analysis_panel)
-        
-        layout.addLayout(main_content_layout)
+        self.show_panel('data')
         
         self.update_styles()
 

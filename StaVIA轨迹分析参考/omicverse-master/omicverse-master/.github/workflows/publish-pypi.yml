@@ -1,0 +1,68 @@
+name: Publish to PyPI
+
+# Build sdist + wheel and publish to PyPI whenever a version tag (vX.Y.Z) is
+# pushed, or on manual dispatch. This replaces the previous manual
+# `python -m build && twine upload` flow.
+#
+# ── One-time setup (PyPI Trusted Publishing, no stored token) ──────────────
+# This workflow uses PyPI "trusted publishing" via OIDC — there is no API
+# token stored in the repo. To enable it, a project owner must register this
+# workflow as a trusted publisher once:
+#   PyPI → project "omicverse" → Manage → Publishing → Add a new publisher
+#     Owner:           omicverse
+#     Repository name: omicverse
+#     Workflow name:   publish-pypi.yml
+#     Environment:     pypi
+# (Prefer this over a stored token. If you'd rather use a token instead,
+#  remove the `id-token: write` permission + the trusted-publish step and add
+#  `with: password: ${{ secrets.PYPI_API_TOKEN }}` to the publish step.)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/omicverse/
+    permissions:
+      id-token: write   # required for PyPI trusted publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Verify artifacts
+        run: |
+          python -m pip install --upgrade twine
+          twine check dist/*
+          # Guard: the built version must match the pushed tag (strip leading v).
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            built=$(ls dist/omicverse-*.tar.gz | sed -E 's#.*/omicverse-(.*)\.tar\.gz#\1#')
+            echo "tag=$tag built=$built"
+            if [ "$tag" != "$built" ]; then
+              echo "::error::tag $tag does not match built version $built"; exit 1
+            fi
+          fi
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

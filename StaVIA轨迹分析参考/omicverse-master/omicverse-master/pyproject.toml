@@ -1,0 +1,399 @@
+[build-system]
+requires = ["setuptools>=61", "wheel", "Cython"]
+build-backend = "setuptools.build_meta"
+
+
+
+[project]
+name = "omicverse"
+version = "2.2.4rc1"
+description = "OmicVerse: A single pipeline for exploring the entire transcriptome universe"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Zehua Zeng", email = "starlitnightly@gmail.com"},
+]
+keywords = ["bioinformatics", "deep-learning", "scRNA-seq", "RNA-seq"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics"
+]
+dependencies = [
+    
+    'numpy>=1.23',
+    'scanpy>=1.9',
+    'pandas>=1.5, <3.0.0',
+    'matplotlib>3.6',
+    'scikit-learn>=1.2',
+    'scipy>=1.8',
+    'networkx>=2.8',
+    'multiprocess>=0.70',
+    'seaborn>=0.11',
+    'datetime>=4.5',
+    'statsmodels>=0.13',
+    'joblib>=1.2',
+    #'gseapy==0.10.8',
+    'ipywidgets>=8.0',
+    #'lifelines>=0.27',
+    #'ktplotspy>=0.1',
+    #'python-dotplot>=0.0.1',
+    #'pybedtools>=0.8.1',
+    #'boltons>=23.0',
+    #'ctxcore>=0.2',
+    #'termcolor>=2.1',
+    
+    
+    #'gdown>=4.6',
+    'igraph>=0.10',
+    #'leidenalg>=0.9',
+    
+    
+    #'phate>=1.0',
+    'tqdm>=4.64',
+    #'pydeseq2>=0.4.1',
+    
+    'adjustText>=0.8',
+    'scikit-misc>=0.1',
+    #'metatime>=1.3.0',
+    
+    #'tensorboard>=2.6',
+    'scikit-image>=0.21',
+    #'scrublet>=0.2',
+    #'scvi-tools>=0.20.1',
+    #'pynvml',
+    'plotly',
+    'numba>=0.56',
+    'tqdm',
+    'requests>=2.0',
+    'transformers>=0.30',
+    'marsilea!=0.5.6',
+    #'wandb',
+    'openai>=1.0',
+    'omicverse-skills>=0.3.0',
+    'omicverse-notebook>=0.1.4',
+    #'cvxpy>=1.3',
+    'zarr<3.0.0',
+    'anndata<0.12.0',
+]
+
+[project.optional-dependencies]
+# Out-of-memory backend (Rust-powered AnnData). Install via:
+#   pip install omicverse[rust]
+# Enables ov.read(path, backend='rust') with chunked preprocessing.
+rust = [
+    "anndataoom>=0.1.0,<1.0",
+]
+full = [
+  "dynamo-release<=1.5.3",
+  "squidpy",
+  "s3fs>=2023.1.0",  # pin to avoid ancient s3fs pulled by squidpy→spatialdata→ome-zarr chain
+  "tangram-sc",
+  "pertpy",
+  "toytree",
+  "arviz",
+  "ete3",
+  "scvi-tools",
+  #"celloracle",
+  'torchdr',
+  'memento-de',
+
+  #old dependencies
+  'pydeseq2>=0.4.1',
+  'mofax>=0.3',
+  'tomli',
+  'lifelines>=0.27',
+  'ktplotspy>=0.1',
+  'pillow>=9.0',
+  'einops>=0.6',
+  'tensorboard>=2.6',
+  'metatime>=1.3.0',
+  'graphtools>=1.5',
+  'boltons>=23.0',
+  'cytoolz>=0.12',
+  'frozendict>=2.3',
+  'leidenalg>=0.9',
+  'gdown>=4.6',
+  'wandb',
+  'pygam>=0.8.0',
+]
+
+easy=[
+  'pydeseq2>=0.4.1',
+  'mofax>=0.3',
+  'tomli',
+  'lifelines>=0.27',
+  'ktplotspy>=0.1',
+  'pillow>=9.0',
+  'einops>=0.6',
+  'tensorboard>=2.6',
+  'metatime>=1.3.0',
+  'graphtools>=1.5',
+  'pandas<3.0.0',
+  'anndata<0.12.0',
+  'numpy>=1.23',
+]
+
+web = [
+  "omicclaw",
+]
+
+# H&E → spatial transcriptomics prediction (``ov.space.histo``). Wraps
+# LazySlide as the WSI / tile / feature-extraction layer and adds STPath,
+# STFlow, HEST-FM and iStar backends for predicting gene expression from
+# histology images. See ``omicverse_guide`` HE-zoo tutorials.
+#
+# LazySlide / wsidata / spatialdata all require Python >= 3.10, but
+# omicverse itself targets >= 3.9; the python_version markers keep the
+# resolver happy on 3.9 wheels while gating the histo stack to 3.10+.
+# Install via: pip install omicverse[histo]   (needs Python >= 3.10)
+histo = [
+  'lazyslide>=0.9; python_version >= "3.10"',
+  'wsidata>=0.7; python_version >= "3.10"',
+  'spatialdata>=0.4; python_version >= "3.10"',
+  'tiffslide>=2.4; python_version >= "3.10"',
+  'timm>=1.0; python_version >= "3.10"',
+  'huggingface_hub>=0.24; python_version >= "3.10"',
+  'geopandas>=1.0; python_version >= "3.10"',
+  'shapely>=2.0; python_version >= "3.10"',
+]
+
+# Trajectory inference zoo — Python ports of the dynbenchmark methods
+# (Saelens et al. 2019). Pulls one wrapper per method that registers as a
+# backend for ``ov.single.TrajInfer(method=...)``. Slingshot is bundled in
+# ``omicverse/single/_pyslingshot.py`` so it stays out of this extras set.
+# Install via: pip install omicverse[trajectory]
+trajectory = [
+  "pycytotrace-bio>=0.1.0",
+  "pydestiny-bio>=0.2.0",
+  "pyurd-bio>=0.2.0",
+  'pymonocle3-bio>=0.1.0; python_version >= "3.10"',
+  "pyscorpius>=0.1.0",
+  "pytscan>=0.1.0",
+]
+
+gsmap = [
+  "torch>=2.0.0,<3.0.0",
+  "torch-geometric>=2.3.0,<3.0.0",
+  "kaleido>=0.2.0,<1.0.0",
+]
+
+skillseeker = [
+  "beautifulsoup4>=4.12",
+  "PyGithub>=2.2",
+  "PyMuPDF>=1.24",
+]
+
+jarvis = [
+  "python-telegram-bot>=21.3",
+  "discord.py>=2.5",
+  "requests>=2.0",
+  "pillow>=9.0",
+  "nbformat>=5.0",
+  "httpx[socks]",
+]
+
+tests = [
+  "pytest>=7.0",
+  "pytest-asyncio>=0.23",
+  "python-telegram-bot>=21.3",
+  "discord.py>=2.5",
+  "requests>=2.0",
+  "pillow>=9.0",
+  "nbformat>=5.0",
+  "httpx[socks]",
+  # ov.micro test dependencies — scikit-bio powers Alpha/Beta/Ordinate,
+  # ete3 powers attach_tree, pydeseq2 is the DESeq2 backend for DA.
+  "scikit-bio>=0.6",
+  "ete3",
+  "pydeseq2>=0.4.1",
+  # ov.protein test dependencies — the standalone proteomics backends
+  # exercised by tests/test_protein.py.
+  "pyimputelcmd>=0.1.1",
+  "pydeqms>=0.1.1",
+  "pyproda>=0.1.1",
+  "pymsstats>=0.3.0",
+  "pyolinkanalyze>=0.2.1",
+  "scikit-misc>=0.3",
+  # ov.metabol lipidomics — Goslin lipid-name parser.
+  "pygoslin>=2.2",
+]
+
+mcp = [
+  "mcp>=1.0; python_version >= '3.10'",
+]
+
+# Proteomics backends for ``ov.protein`` — pure-Python ports of the
+# canonical Bioconductor / CRAN proteomics R packages. Install via:
+#   pip install omicverse[protein]
+# Enables the full bulk LC-MS/MS + Olink workflow: imputation
+# (imputeLCMD), peptide-count-aware DE (DEqMS), MNAR probabilistic DE
+# (proDA), DDA/DIA pipeline (MSstats), and Olink NPX analysis
+# (OlinkAnalyze).
+protein = [
+  "pyimputelcmd>=0.1.1",   # Bioconductor imputeLCMD — left-censored imputation
+  "pydeqms>=0.1.1",        # Bioconductor DEqMS — peptide-count moderated t
+  "pyproda>=0.1.1",        # Bioconductor proDA — MNAR probabilistic DE
+  "pymsstats>=0.3.0",      # Bioconductor MSstats — DDA/DIA pipeline
+  "pyolinkanalyze>=0.2.1", # CRAN OlinkAnalyze — Olink NPX analysis
+  "scikit-misc>=0.3",      # R-faithful loess (DEqMS variance prior)
+  "statsmodels>=0.14",     # LMM / ANOVA / ordinal regression backends
+]
+
+# Statistical-genetics backends for ``ov.genetics`` — pure-Python ports
+# of the canonical post-GWAS analysis tools. Install via:
+#   pip install omicverse[genetics]
+# Enables the full post-GWAS workflow: eQTL mapping (Matrix eQTL),
+# fine-mapping (SuSiE), colocalization (coloc), Mendelian randomization
+# (TwoSampleMR), single-cell disease-relevance scoring (scDRS), LD score
+# regression / SEG (LDSC), and TWAS (S-PrediXcan / S-MultiXcan).
+genetics = [
+  "pymatrixeqtl>=0.1.0",   # Matrix eQTL — cis/trans eQTL mapping
+  "pysusie>=0.1.0",        # SuSiE — Bayesian statistical fine-mapping
+  "pycoloc>=0.1.0",        # coloc — Bayesian colocalization
+  "pytwosamplemr>=0.1.0",  # TwoSampleMR — two-sample Mendelian randomization
+  "pyscdrs>=0.1.0",        # scDRS — single-cell disease-relevance scoring
+  "pyldsc>=0.1.0",         # LDSC — LD score regression / partitioned h2 / SEG
+  "pytwas>=0.1.0",         # S-PrediXcan / S-MultiXcan — TWAS
+  "statsmodels>=0.14",     # logistic GWAS association / mixed-model backends
+]
+
+# Immune-repertoire (AIRR-seq: TCR/BCR) backends for ``ov.airr`` —
+# pure-Python R-parity ports of the canonical repertoire-analysis tools.
+# Install via:
+#   pip install omicverse[airr]
+# Enables the full bulk + B-cell workflow: bulk repertoire analytics
+# (immunarch), Immcantation core (alakazam), somatic hypermutation
+# (shazam), B-cell clonal clustering (scoper), immunoglobulin genotyping
+# (tigger), B-cell phylogenetics (dowser), and GLIPH2 TCR specificity
+# grouping (gliph). The single-cell AIRR analysis (read_10x_vdj,
+# chain_qc, define_clonotypes, TCRdist, …) needs no backend — it runs
+# on numpy / pandas / anndata directly.
+airr = [
+  "pyimmunarch>=0.1.0",    # immunarch — bulk repertoire diversity / overlap / usage
+  "pyalakazam>=0.1.0",     # alakazam — Immcantation core: Hill diversity, lineages
+  "pyshazam>=0.1.0",       # shazam — somatic hypermutation / targeting / BASELINe
+  "pyscoper>=0.1.0",       # scoper — B-cell clonal clustering
+  "pytigger>=0.1.0",       # tigger — immunoglobulin genotyping
+  "pydowser>=0.1.0",       # dowser — B-cell phylogenetics
+  "pygliph>=0.1.0",        # gliph — GLIPH2 TCR specificity grouping
+]
+
+# Ambient / contamination-RNA removal backends for ``ov.pp.ambient`` —
+# pure-Python R-parity ports of the canonical droplet-soup decontamination
+# methods. Install via:
+#   pip install omicverse[ambient]
+# Enables the full ambient-RNA QC step: SoupX (empty-droplet soup profile +
+# constrained multinomial subtraction), DecontX (variational-EM two-
+# component mixture), FastCAR (deterministic per-gene subtraction) and
+# scCDC (entropy-based correction of Global-Contamination-causing Genes).
+# The deep-learning methods reachable via remove_ambient(method='cellbender'
+# / 'scar') are heavyweight and intentionally NOT bundled here — install
+# CellBender / scAR directly when needed.
+ambient = [
+  "pysoupx>=0.1.0",        # SoupX — empty-droplet soup profile, multinomial subtraction
+  "pydecontx>=0.1.0",      # DecontX — variational-EM contamination mixture
+  "pyfastcar>=0.1.0",      # FastCAR — deterministic per-gene ambient subtraction
+  "pysccdc>=0.1.0",        # scCDC — entropy-based GCG-specific decontamination
+]
+
+# Lipidomics backend for the lipidomics path of ``ov.metabol`` — a
+# pure-Python port of the Bioconductor lipidr workflow. Install via:
+#   pip install omicverse[lipidomics]
+# Enables ov.metabol.read_skyline / summarize_transitions /
+# normalize_pqn / normalize_istd / de_lipids / lsea / lipid_mva
+# (Skyline I/O, ISTD & PQN normalization, limma moderated-t DE,
+# Lipid Set Enrichment Analysis, and PCA / OPLS-DA multivariate analysis).
+lipidomics = [
+  "pylipidr>=0.1.0",       # Bioconductor lipidr — lipidomics analysis
+  "pygoslin>=2.2",         # Goslin — LIPID MAPS shorthand parser
+]
+
+# Time-course / longitudinal bulk RNA-seq. Install via:
+#   pip install omicverse[timecourse]
+# pyDEG.timecourse_deg (limma-voom + moderated F over a spline/factor
+# time basis) needs no extra package; temporal_clusters soft-clusters the
+# trajectories via pymfuzz, a pure-Python port of Bioconductor Mfuzz.
+timecourse = [
+  "pymfuzz>=0.1.0",        # Bioconductor Mfuzz — fuzzy c-means time-series clustering
+]
+
+# Molecular structure & drug-binding analysis for ``ov.mol`` — takes an
+# omics target protein and answers "what does it look like in 3D, and can
+# it be drugged?". Install via:
+#   pip install omicverse[mol]
+# Core layer: structure acquisition (AlphaFold DB / RCSB PDB / ESMFold
+# API), interactive in-notebook 3D visualization (py3Dmol — survives
+# nbconvert HTML export), and known-drug lookup (ChEMBL).
+# ov.mol needs Python >= 3.10 (biotite >= 1.0 drops 3.9) — every dependency
+# carries the marker so the universal resolver stays satisfiable on 3.9.
+mol = [
+  "py3Dmol>=2.5; python_version >= '3.10'",                    # 3Dmol.js — interactive HTML/JS 3D viz
+  "biotite>=1.0; python_version >= '3.10'",                    # structure parsing (PDB / mmCIF)
+  "chembl_webresource_client>=0.10; python_version >= '3.10'", # ChEMBL — known drugs / bioactivity
+  "requests>=2.0; python_version >= '3.10'",                   # AlphaFold DB / RCSB / UniProt REST
+]
+
+# Docking layer for ``ov.mol`` — AutoDock Vina docking of small molecules
+# into target structures. Install via:
+#   pip install omicverse[mol-dock]
+# Adds receptor / ligand preparation and the Vina search engine. The
+# binding-pocket backend (rust-fpocket, distributed as the pip package
+# ``fpocket-rs``) is installed separately: pip install fpocket-rs.
+mol-dock = [
+  "rdkit>=2023.9; python_version >= '3.10'", # ligand handling — SMILES, ETKDG 3D embedding
+  "vina>=1.2; python_version >= '3.10'",     # AutoDock Vina — docking search + scoring
+  "meeko>=0.7; python_version >= '3.10'",    # receptor / ligand pdbqt preparation
+  "gemmi>=0.7; python_version >= '3.10'",    # structure I/O (meeko dependency)
+]
+
+
+[project.urls]
+Github = 'https://github.com/Starlitnightly/omicverse'
+
+[project.scripts]
+ov-skill-seeker = "omicverse.ov_skill_seeker.cli:main"
+omicverse = "omicverse.cli:main"
+omicverse-mcp = "omicverse.mcp.server:main"
+
+[tool.setuptools.packages.find]
+include = ["omicverse*"]
+exclude = [
+  "tests*",
+  "docs*",
+  "omicverse_web*",
+  "omicverse_guide*",
+  "OvIntelligence*",
+  "READMEM*",
+  "tmp*",
+  "Skill_Seekers*",
+]
+
+[tool.setuptools.package-data]
+"omicverse.pl" = ["_data/*.csv"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+  "integration: integration tests that exercise the public fm API",
+  "fm_real: real foundation-model inference tests intended for the Taiwan GPU server",
+  "fm_gpu: GPU-backed foundation-model tests intended for the Taiwan GPU server",
+  "mock: MCP tests using mock registry only (no real packages needed)",
+  "core: MCP tests requiring anndata + scanpy (core OmicVerse deps)",
+  "scientific: MCP tests requiring anndata + scanpy + scientific stack (scvelo, squidpy)",
+  "extended: MCP tests requiring optional heavy packages (SEACells, pertpy, mira)",
+  "real_runtime: MCP tests that import real OmicVerse modules (superset of core/scientific/extended)",
+]

@@ -1,0 +1,67 @@
+name: Deploy Docs to omicverse-pages
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:   # allow manual trigger from the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout (with submodules so omicverse_guide is available) ──
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0   # full history needed by sphinx.ext.linkcode
+
+      # ── 2. Python ────────────────────────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. Cache pip to speed up repeated runs ────────────────────────
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: docs-pip-${{ hashFiles('omicverse_guide/requirements.txt', 'pyproject.toml') }}
+          restore-keys: docs-pip-
+
+      # ── 4. Install dependencies ────────────────────────────────────────
+      # Install omicverse from the local checkout (editable) so autodoc uses
+      # the latest source, then install the Sphinx stack.
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install -r omicverse_guide/requirements.txt
+
+      # ── 5. Build Sphinx HTML ───────────────────────────────────────────
+      # -T: show full traceback on extension errors so failures are debuggable
+      #     without a second manual run.
+      - name: Build docs
+        run: |
+          sphinx-build -b html \
+            omicverse_guide/docs \
+            omicverse_guide/docs/_build/html \
+            -q -T
+
+      # ── 6. Configure git identity for docs deploy push ────────────────
+      - name: Configure git
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ── 7. Deploy to the standalone documentation repository ──────────
+      - name: Deploy to omicverse-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.OMICVERSE_PAGES_TOKEN }}
+          external_repository: omicverse/omicverse-pages
+          publish_branch: main
+          publish_dir: omicverse_guide/docs/_build/html
+          force_orphan: true
+          commit_message: "docs: auto-deploy from ${{ github.sha }}"

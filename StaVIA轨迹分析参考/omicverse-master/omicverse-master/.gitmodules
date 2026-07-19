@@ -1,0 +1,3 @@
+[submodule "omicverse_guide"]
+	path = omicverse_guide
+	url = https://github.com/omicverse/omicverse-tutorials.git

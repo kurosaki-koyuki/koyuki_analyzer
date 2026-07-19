@@ -19,8 +19,11 @@ class ScRNADataManager:
         self.valid_groups = []
         self.current_data_folder = None
         self.data_info = {}
+        self.h5ad_path = None
         self.seurat_path = None
         self.seurat_loaded = False
+        self.seurat_metadata_columns = []
+        self.seurat_metadata_values = {}
     
     def scan_data_folder(self):
         """扫描数据路径，返回h5ad文件列表（纯数据，不操作控件）"""
@@ -67,6 +70,7 @@ class ScRNADataManager:
 
             import scanpy as sc
             self.adata = sc.read_h5ad(data_path)
+            self.h5ad_path = data_path
 
             possible_keys = ["X_umap", "X_UMAP"]
             for key in possible_keys:
@@ -112,6 +116,7 @@ class ScRNADataManager:
     def clear_data(self):
         """清空数据"""
         self.adata = None
+        self.h5ad_path = None
         self.dataset_name = None
         self.dataset_output_dir = None
         self.static_umap_dir = None
@@ -152,13 +157,24 @@ class ScRNADataManager:
             self.seurat_path = rds_path
             self.seurat_loaded = True
             self.dataset_name = os.path.splitext(selected_file)[0]
+            self.dataset_output_dir = os.path.join(OUT_BASE, self.dataset_name)
+            os.makedirs(self.dataset_output_dir, exist_ok=True)
+            
+            self.seurat_metadata_columns = list(robjects.r('colnames(seurat_obj@meta.data)'))
+            
+            self.seurat_metadata_values = {}
+            for col in self.seurat_metadata_columns:
+                values = robjects.r(f'unique(seurat_obj@meta.data[["{col}"]])')
+                self.seurat_metadata_values[col] = [str(v) for v in values]
             
             rds_info = {
                 'cells': cell_count,
                 'genes': gene_count,
                 'dataset': self.dataset_name,
                 'seurat_path': rds_path,
-                'seurat_loaded': True
+                'seurat_loaded': True,
+                'metadata_columns': self.seurat_metadata_columns,
+                'metadata_values': self.seurat_metadata_values
             }
             
             return True, rds_info, ""

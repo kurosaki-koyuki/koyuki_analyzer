@@ -1,0 +1,68 @@
+from omicverse.external import VIA
+
+
+ncomps=30
+knn=15
+v0_random_seed=4
+root_user = ['0'] #the index of a cell belonging to the nIPC cell type
+memory = 10
+dataset = ''
+use_rep = 'X_scVI'
+clusters = 'leiden'
+basis='X_umap'
+
+'''
+#NOTE1, if you decide to choose a cell type as a root, then you need to set the dataset as 'group'
+#root_user=['HSC1']
+#dataset = 'group'# 'humanCD34'
+#NOTE2, if rna-velocity is available, considering using it to compute the root automatically- see RNA velocity tutorial
+'''
+
+v0 = VIA.core.VIA(data=adata.obsm[use_rep][:, 0:ncomps],
+true_label=adata.obs[clusters],
+edgepruning_clustering_resolution=0.15, cluster_graph_pruning=0.15,
+knn=knn,  root_user=root_user, resolution_parameter=1.5,
+dataset=dataset, random_seed=v0_random_seed, memory=memory)#, do_compute_embedding=True, embedding_type='via-atlas')
+
+v0.run_VIA()
+
+##可视化
+fig, ax, ax1 = VIA.core.plot_piechart_viagraph_ov(adata,clusters='leiden',dpi=80,
+via_object=v0, ax_text=False,show_legend=False)
+fig.set_size_inches(8,4)
+
+adata.obs['pt_via']=v0.single_cell_pt_markov
+import matplotlib.pyplot as plt
+
+import matplotlib.pyplot as plt
+ax=(ov.pl.embedding(adata,basis='X_umap',
+color=['pt_via'],
+frameon='small',cmap='Reds',show=False)
+)
+#plt.tight_layout()  # 自动调整布局
+plt.show()
+
+clusters='leiden'
+color_true_list=adata.uns['{}_colors'.format(clusters)]
+
+import matplotlib.pyplot as plt
+fig, ax, ax1 = VIA.core.plot_trajectory_curves_ov(
+    adata,
+clusters='leiden',
+dpi=80,
+via_object=v0,
+embedding=adata.obsm['X_umap'],
+draw_all_curves=False
+)
+plt.show()
+
+import matplotlib.pyplot as plt
+v0.embedding = adata.obsm['X_umap']
+fig, ax = VIA.core.plot_atlas_view(via_object=v0,
+n_milestones=150,
+sc_labels=adata.obs['leiden'],
+fontsize_title=12,
+fontsize_labels=12,dpi=80,
+extra_title_text='Atlas View colored by pseudotime')
+fig.set_size_inches(4,4)
+plt.show()

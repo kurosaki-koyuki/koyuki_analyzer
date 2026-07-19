@@ -75,6 +75,10 @@ class RKernelInterface:
 
         # 检查R环境是否已初始化
         if self._is_initialized:
+            # 如果路径相同，直接返回成功
+            if self._r_path and os.path.abspath(self._r_path) == os.path.abspath(path):
+                return True
+            # 如果路径不同，返回错误
             self._error_message = f"R环境已初始化（当前: {self._r_path}），无法在同一进程中切换R内核。请重启应用以使用新的R路径: {path}"
             print(f"[RKernelInterface] {self._error_message}")
             return False
@@ -206,7 +210,7 @@ class RKernelInterface:
             self._error_message = f"导入R包 '{package_name}' 失败: {str(e)}"
             return None
     
-    def execute_r_code(self, code: str) -> Optional[Any]:
+    def execute_r_code(self, code: str) -> Optional[str]:
         """
         执行R代码
         
@@ -216,15 +220,17 @@ class RKernelInterface:
             code: R代码字符串
         
         Returns:
-            执行结果，如果失败则返回None
+            R代码的输出结果字符串，如果失败则返回None
         """
         if not self.is_r_available() or robjects is None:
             self._error_message = "R环境不可用"
             return None
         
         try:
-            result = robjects.R(code)
-            return result
+            result = robjects.r(code)
+            if result is not None:
+                return str(result)
+            return ""
         except Exception as e:
             self._error_message = f"执行R代码失败: {str(e)}"
             return None

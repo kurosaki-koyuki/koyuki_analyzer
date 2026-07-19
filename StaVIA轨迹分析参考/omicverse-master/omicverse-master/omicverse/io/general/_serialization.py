@@ -1,0 +1,168 @@
+import os
+import contextlib
+
+from ..._registry import register_function
+
+
+@contextlib.contextmanager
+def _patch_categorical_setstate():
+    """Temporarily patch ``Categorical.__setstate__`` to tolerate old pickle formats.
+
+    Older pandas versions serialised ``Categorical`` as a ``(dtype, codes)``
+    tuple.  Newer pandas (≥ 2.x) dropped that path and raises
+    ``NotImplementedError``.  This context-manager installs a shim that
+    reconstructs the ``Categorical`` from the tuple when needed, and restores
+    the original method on exit.
+    """
+    try:
+        from pandas import Categorical, CategoricalDtype
+    except ImportError:
+        yield
+        return
+
+    _orig = Categorical.__setstate__
+
+    def _compat_setstate(self, state):
+        if isinstance(state, tuple) and len(state) == 2:
+            dtype, codes = state
+            if isinstance(dtype, CategoricalDtype):
+                import numpy as np
+                # Reconstruct via dict-based __setstate__ which pandas 2.x supports
+                dict_state = {
+                    "_dtype": dtype,
+                    "_ndarray": np.asarray(codes, dtype=np.intp),
+                }
+                return _orig(self, dict_state)
+        return _orig(self, state)
+
+    Categorical.__setstate__ = _compat_setstate
+    try:
+        yield
+    finally:
+        Categorical.__setstate__ = _orig
+
+
+@register_function(
+    aliases=['保存对象', 'save', 'pickle save'],
+    category="utils",
+    description="Persist Python objects (models, results, intermediate analysis states) for reproducible downstream reuse.",
+    prerequisites={},
+    requires={},
+    produces={},
+    auto_fix='none',
+    examples=['ov.utils.save(cpdb_results, "data/cpdb/gex_cpdb_test.pkl")'],
+    related=['utils.load']
+)
+def save(file, path):
+    """
+    Save Python object to file using pickle fallback strategy.
+
+    Parameters
+    ----------
+    file : Any
+        Python object to serialize.
+    path : str
+        Output file path.
+
+    Returns
+    -------
+    None
+        Writes serialized bytes to disk.
+    """
+    print("💾 Save Operation:")
+    print(f"   Target path: {path}")
+    print(f"   Object type: {type(file).__name__}")
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    try:
+        import pickle
+        print("   Using: pickle")
+        with open(path, 'wb') as f:
+            pickle.dump(file, f)
+        print("   ✅ Successfully saved!")
+    except Exception:
+        import cloudpickle
+        print("   Pickle failed, switching to: cloudpickle")
+        with open(path, 'wb') as f:
+            cloudpickle.dump(file, f)
+        print("   ✅ Successfully saved using cloudpickle!")
+    print("─" * 60)
+
+
+@register_function(
+    aliases=['加载对象', 'load', 'pickle load'],
+    category="utils",
+    description="Load serialized analysis objects previously saved with ov.utils.save to resume computation or visualization.",
+    prerequisites={},
+    requires={},
+    produces={},
+    auto_fix='none',
+    examples=['cpdb_results = ov.utils.load("data/cpdb/gex_cpdb_test.pkl")'],
+    related=['utils.save']
+)
+def load(path, backend=None):
+    """
+    Load serialized Python object from disk.
+
+    Parameters
+    ----------
+    path : str
+        Input file path.
+    backend : {'pickle', 'cloudpickle'} or None, default=None
+        Preferred deserializer backend (``'pickle'`` or ``'cloudpickle'``).
+
+    Returns
+    -------
+    Any
+        Deserialized Python object.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is not one of ``None``, ``'pickle'``, or ``'cloudpickle'``.
+    """
+    print("📂 Load Operation:")
+    print(f"   Source path: {path}")
+    with _patch_categorical_setstate():
+        if backend is None:
+            try:
+                import pickle
+                print("   Using: pickle")
+                with open(path, 'rb') as f:
+                    data = pickle.load(f)
+                print("   ✅ Successfully loaded!")
+                print(f"   Loaded object type: {type(data).__name__}")
+                print("─" * 60)
+                return data
+            except Exception:
+                import cloudpickle
+                print("   Pickle failed, switching to: cloudpickle")
+                with open(path, 'rb') as f:
+                    data = cloudpickle.load(f)
+                print("   ✅ Successfully loaded using cloudpickle!")
+                print(f"   Loaded object type: {type(data).__name__}")
+                print("─" * 60)
+                return data
+
+        if backend == 'pickle':
+            import pickle
+            print("   Using: pickle")
+            with open(path, 'rb') as f:
+                data = pickle.load(f)
+            print("   ✅ Successfully loaded!")
+            print(f"   Loaded object type: {type(data).__name__}")
+            print("─" * 60)
+            return data
+
+        if backend == 'cloudpickle':
+            import cloudpickle
+            print("   Using: cloudpickle")
+            with open(path, 'rb') as f:
+                data = cloudpickle.load(f)
+            print("   ✅ Successfully loaded!")
+            print(f"   Loaded object type: {type(data).__name__}")
+            print("─" * 60)
+            return data
+
+    raise ValueError(f"Invalid backend: {backend}")

@@ -1,0 +1,1470 @@
+"""Classes and methods for array-based spatial transcriptomics analysis."""
+
+import itertools
+from typing import Iterable, Iterator, Sequence, cast
+from multiprocessing import Process, Queue
+from multiprocessing.shared_memory import SharedMemory
+import threading
+from warnings import simplefilter
+
+import numpy as np
+import numpy.typing as npt
+from scipy import sparse
+from tqdm import tqdm
+import pandas as pd
+from .countdata import CountTable
+from .classifier import Classifier
+from .densetools import first_nonzero_1d, density_hull
+from . import Colors, EMOJI
+
+
+def combine_coords(coords: Iterable[int]) -> str:
+    """Combines a tuple of ints into a unique string identifier."""
+    return ','.join(map(str, coords))
+
+
+def split_coords(ident: str) -> tuple[int, ...]:
+    """Splits a unique identifier into its corresponding coordinates.
+
+    Args:
+        ident: A string of the form '{x1},{x2},...,{xn}'.
+
+    Returns:
+        A tuple of integers (x1, x2, ..., xn).
+    """
+    return tuple(map(int, ident.split(','))) if ident else ()
+
+
+def first_coord(ident: str) -> int:
+    """Obtains the first coordinate from a unique identifier.
+
+    Args:
+        ident: A string of the form '{x1},{x2},...,{xn}' where n>=1.
+
+    Returns:
+        The integer x1.
+    """
+    return split_coords(ident)[0]
+
+
+def second_coord(ident: str) -> int:
+    """Obtains the first coordinate from a unique identifier.
+
+    Args:
+        ident: A string of the form '{x1},{x2},...,{xn}' where n >= 2.
+
+    Returns:
+        The integer x2.
+    """
+    return split_coords(ident)[1]
+
+
+def cartesian_product(x: npt.ArrayLike, y: npt.ArrayLike) -> npt.NDArray:
+    """Computes the cartesian products of two 1-d vectors.
+
+    Args:
+        x: The first vector
+        y: The second vector
+
+    Returns:
+        An array of shape (len(x) * len(y), 2) whose rows are precisely all
+        possible tuples with first value in x and second value in y.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    return np.transpose([np.tile(x, len(y)),
+                         np.repeat(y, len(x))])
+
+
+def square_nbhd(point: tuple[int, int],
+                scale: int,
+                x_range: tuple[int, int],
+                y_range: tuple[int, int]
+                ) -> Iterator[tuple[int, int]]:
+    """All coordinates in a square neighbourhood about a point.
+
+    Args:
+        point: the (x,y) coordinates of the point
+        scale: the radius of the square
+        x_range: the least and greatest acceptable x values
+        y_range: the least and greated acceptable y values
+
+    Yields:
+        All tuples (i,j) satisfying the following:
+            - x_range[0] <= i <= x_range[1]
+            - y_range[0] <= j <= y_range[1]
+            - d(x,i) <= scale
+            - d(y,j) <= scale
+    """
+    x, y = point
+    x_min, x_max = x_range
+    y_min, y_max = y_range
+    x_min = max(x_min, x - scale)
+    x_max = min(x_max, x + scale)
+    y_min = max(y_min, y - scale)
+    y_max = min(y_max, y + scale)
+    return itertools.product(range(x_min, x_max+1), range(y_min, y_max+1))
+
+
+def square_nbhd_vec(point: tuple[int, int],
+                    scale: int,
+                    x_range: tuple[int, int],
+                    y_range: tuple[int, int]
+                    ) -> npt.NDArray:
+    """Returns a 2D array of all coords in a square nbhd about a point
+
+    Args:
+        point: the (x,y) coordinates of the point
+        scale: the radius of the square
+        x_range: the least and greatest acceptable x values
+        y_range: the least and greated acceptable y values
+
+    Returns:
+        An array A of shape (n*m, 2) where n = x_range[1] - x_range[0] + 1
+        and m = y_range[1] - y_range[0] + 1, whose rows are precisely the
+        elements of square_nbhd(point, scale, x_range, y_range).
+    """
+    x, y = point
+    x_min, x_max = x_range
+    y_min, y_max = y_range
+    if x_max < x_min or y_max < y_min:
+        return np.empty((0,2))
+    x_min = max(x_min, x - scale)
+    x_max = min(x_max, x + scale)
+    y_min = max(y_min, y - scale)
+    y_max = min(y_max, y + scale)
+    return cartesian_product(np.arange(x_min, x_max + 1),
+                             np.arange(y_min, y_max + 1))
+
+
+def extract_classifications(confidence_matrix: npt.NDArray,
+                            threshold: float
+                            ) -> dict[tuple[int, int], int]:
+    """Extracts a dictionary of all spot classifications given the threshold.
+
+    Args:
+        confidence_matrix:
+            A matrix X such that X[i, j, s, c] is the confidence that the
+            cell type of spot (i, j) is c at scale s.
+        threshold:
+            The confidence threshold.
+
+    Returns:
+        A dictionary d such that (i, j) is in d if and only if there is some
+        scale s and cell type c so that confidence_matrix[i, j, s, c] >= threshold.
+        Moreover, d[x,y] is the value of c corresponding to the lowest such
+        value of s.
+    """
+    confident = zip(*np.where(confidence_matrix >= threshold))
+    confident = cast(Iterator[tuple[int, int, int, int]], confident)
+
+    classifications: dict[tuple[int, int], int] = {}
+
+    for i, j, _, cell_type in confident:
+        if (i, j) not in classifications:
+            classifications[i, j] = cell_type
+
+    return classifications
+
+
+def extract_image(confidence_matrix: npt.NDArray,
+                  threshold: float
+                  ) -> npt.NDArray:
+    classifications = extract_classifications(confidence_matrix, threshold)
+
+    image = np.empty(confidence_matrix.shape[:2])
+    image[:] = np.nan
+
+    for (i, j), c in classifications.items():
+        image[i, j] = c
+
+    return image
+
+
+def extract_classifications_from_dict(result_dict: dict[tuple[int, int], npt.NDArray],
+                                      threshold: float,
+                                      x_min: int = 0,
+                                      y_min: int = 0
+                                      ) -> dict[tuple[int, int], int]:
+    """Extract cell type classifications from result dictionary.
+
+    Args:
+        result_dict:
+            Dictionary {(i, j): probs} where probs is array of shape (n_scales, n_classes)
+        threshold:
+            Confidence threshold for classification
+        x_min, y_min:
+            Grid offsets (if coordinates are not 0-indexed)
+
+    Returns:
+        Dictionary {(i, j): cell_type} for spots passing threshold
+    """
+    classifications: dict[tuple[int, int], int] = {}
+
+    for (i, j), probs in result_dict.items():
+        # probs shape: (n_scales, n_classes)
+        # For each scale, find best class
+        max_per_scale = probs.max(axis=1)  # Max confidence per scale
+
+        # Find first scale meeting threshold (lowest scale)
+        for scale_idx, scale_confidences in enumerate(probs):
+            best_class = scale_confidences.argmax()
+            confidence = scale_confidences[best_class]
+
+            if confidence >= threshold:
+                # Adjust coordinates if needed
+                classifications[(i - x_min, j - y_min)] = best_class
+                break  # Use lowest scale
+
+    return classifications
+
+
+def extract_image_from_dict(result_dict: dict[tuple[int, int], npt.NDArray],
+                            grid_shape: tuple[int, int],
+                            threshold: float,
+                            x_min: int = 0,
+                            y_min: int = 0,
+                            return_confidence: bool = False
+                            ) -> npt.NDArray | tuple[npt.NDArray, npt.NDArray]:
+    """Extract classification image from result dictionary.
+
+    Args:
+        result_dict:
+            Dictionary {(i, j): probs} from classify_parallel with return_dict=True
+        grid_shape:
+            (height, width) of output image
+        threshold:
+            Confidence threshold
+        x_min, y_min:
+            Grid offsets
+        return_confidence:
+            If True, also return confidence values
+
+    Returns:
+        classification_image: (height, width) array of cell types (NaN for unclassified)
+        [confidence_image]: (height, width) array of confidence values (if requested)
+    """
+    height, width = grid_shape
+    classification = np.full((height, width), np.nan)
+    confidences = np.full((height, width), np.nan) if return_confidence else None
+
+    for (i, j), probs in result_dict.items():
+        # Adjust coordinates
+        adj_i = i - x_min
+        adj_j = j - y_min
+
+        # Check bounds
+        if not (0 <= adj_i < height and 0 <= adj_j < width):
+            continue
+
+        # Find best classification across scales
+        for scale_idx, scale_confidences in enumerate(probs):
+            best_class = scale_confidences.argmax()
+            confidence = scale_confidences[best_class]
+
+            if confidence >= threshold:
+                classification[adj_i, adj_j] = best_class
+                if return_confidence:
+                    confidences[adj_i, adj_j] = confidence
+                break  # Use lowest scale
+
+    if return_confidence:
+        return classification, confidences
+    return classification
+
+
+def dict_to_full_matrix(result_dict: dict[tuple[int, int], npt.NDArray],
+                       grid_shape: tuple[int, int],
+                       num_scales: int,
+                       num_classes: int,
+                       x_min: int = 0,
+                       y_min: int = 0
+                       ) -> npt.NDArray:
+    """Convert result dictionary to full 4D confidence matrix.
+
+    Useful if you need the full matrix format for compatibility with existing code.
+
+    Args:
+        result_dict: Dictionary {(i, j): probs} from classify_parallel
+        grid_shape: (height, width) of grid
+        num_scales: Number of scales
+        num_classes: Number of cell types
+        x_min, y_min: Grid offsets
+
+    Returns:
+        4D array of shape (height, width, num_scales, num_classes)
+    """
+    height, width = grid_shape
+    matrix = np.full((height, width, num_scales, num_classes), np.nan, dtype=np.float32)
+
+    for (i, j), probs in result_dict.items():
+        adj_i = i - x_min
+        adj_j = j - y_min
+
+        if 0 <= adj_i < height and 0 <= adj_j < width:
+            matrix[adj_i, adj_j] = probs
+
+    return matrix
+
+
+class ExpressionGrid:
+    """A spatial grid equipped with gene expressions.
+
+    An ExpressionGrid encapsulates a 2D grid. For each coordinate (x,y) in the
+    grid, we have a corresponding gene expression vector where each entry
+    counts the number of reads of its corresponding gene.
+
+    Attributes:
+        x_min: The smallest x coordinate in the grid.
+        y_min: The smallest y coordinate in the grid.
+        x_max: The largest x coordinate in the grid.
+        y_max: The largest y coordinate in the grid.
+        height: The height of the grid.
+        width: The width of the grid.
+    """
+
+    @classmethod
+    def from_anndata(cls, adata, genes: Sequence[str]):
+        """Create ExpressionGrid directly from AnnData (efficient).
+
+        Args:
+            adata: AnnData object with spatial coordinates
+            genes: List of genes to use (from reference)
+
+        Returns:
+            ExpressionGrid object
+        """
+        print(f"{Colors.CYAN}{EMOJI['grid']} Creating ExpressionGrid from AnnData (efficient mode)...{Colors.ENDC}")
+
+        # Step 1: Extract spatial coordinates
+        print(f"{Colors.CYAN}  [1/5] Extracting spatial coordinates...{Colors.ENDC}")
+        if 'spatial' in adata.obsm:
+            spatial_coords = adata.obsm['spatial']
+            x_coords = np.round(spatial_coords[:, 0]).astype(int)
+            y_coords = np.round(spatial_coords[:, 1]).astype(int)
+        elif 'x' in adata.obs.columns and 'y' in adata.obs.columns:
+            x_coords = np.round(adata.obs['x'].values).astype(int)
+            y_coords = np.round(adata.obs['y'].values).astype(int)
+        else:
+            raise ValueError("AnnData must have spatial coordinates")
+        print(f"{Colors.GREEN}        ✓ Extracted coordinates for {len(x_coords)} spots{Colors.ENDC}")
+
+        # Create instance without going through __init__
+        grid = cls.__new__(cls)
+
+        # Step 2: Set coordinate bounds
+        print(f"{Colors.CYAN}  [2/5] Computing grid dimensions...{Colors.ENDC}")
+        grid.x_min, grid.x_max = int(x_coords.min()), int(x_coords.max())
+        grid.y_min, grid.y_max = int(y_coords.min()), int(y_coords.max())
+        grid.height = grid.x_max - grid.x_min + 1
+        grid.width = grid.y_max - grid.y_min + 1
+        grid.num_genes = len(genes)
+
+        print(f"{Colors.GREEN}        ✓ Grid size: {grid.height}×{grid.width}{Colors.ENDC}")
+        print(f"{Colors.BLUE}        → Total grid positions: {grid.height * grid.width}{Colors.ENDC}")
+        print(f"{Colors.BLUE}        → AnnData spots: {adata.n_obs}{Colors.ENDC}")
+        print(f"{Colors.BLUE}        → Non-zero values: {adata.X.nnz:,}{Colors.ENDC}")
+
+        # Step 3: Filter genes to match reference
+        print(f"{Colors.CYAN}  [3/5] Matching genes with reference...{Colors.ENDC}")
+        gene_indices = []
+        gene_mapping = {gene: idx for idx, gene in enumerate(genes)}
+        adata_genes = list(adata.var_names)
+
+        for i in tqdm(range(len(adata_genes)), desc=f"{Colors.BLUE}        Matching genes{Colors.ENDC}",
+                     leave=False, ncols=80):
+            gene = adata_genes[i]
+            if gene in gene_mapping:
+                gene_indices.append((i, gene_mapping[gene]))
+
+        print(f"{Colors.GREEN}        ✓ Matched {len(gene_indices)}/{len(adata_genes)} genes{Colors.ENDC}")
+
+        # Step 4: Build sparse matrix directly using COO format (memory efficient)
+        print(f"{Colors.CYAN}  [4/5] Building grid matrix (memory-efficient mode)...{Colors.ENDC}")
+        n_grid_spots = grid.height * grid.width
+
+        # Get matrix in efficient format
+        print(f"{Colors.BLUE}        → Preparing expression matrix...{Colors.ENDC}")
+        if not sparse.isspmatrix(adata.X):
+            adata_matrix = sparse.csr_matrix(adata.X)
+        else:
+            adata_matrix = adata.X.tocsr()
+        print(f"{Colors.GREEN}        ✓ Matrix ready for processing{Colors.ENDC}")
+
+        # Build lists for COO format (memory efficient - only store non-zero values)
+        print(f"{Colors.BLUE}        → Extracting non-zero values (this avoids creating huge matrix)...{Colors.ENDC}")
+        row_indices = []
+        col_indices = []
+        data_values = []
+
+        # Convert gene_indices to dict for faster lookup
+        gene_idx_dict = dict(gene_indices)
+
+        # Process in batches to show detailed progress
+        batch_size = 10000  # Process 10k spots at a time
+        n_batches = (adata.n_obs + batch_size - 1) // batch_size
+
+        print(f"{Colors.BLUE}        → Processing {adata.n_obs:,} spots in {n_batches} batches...{Colors.ENDC}")
+
+        # Overall progress bar with detailed stats
+        with tqdm(total=adata.n_obs,
+                 desc=f"{Colors.CYAN}        Processing spots{Colors.ENDC}",
+                 ncols=120,
+                 bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] {postfix}',
+                 unit='spot') as pbar:
+
+            for batch_idx in range(n_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min((batch_idx + 1) * batch_size, adata.n_obs)
+                batch_spots = end_idx - start_idx
+
+                # Update batch progress info
+                pbar.set_postfix_str(
+                    f"Batch {batch_idx+1}/{n_batches} | Values: {len(data_values):,}",
+                    refresh=True
+                )
+
+                # Process spots in this batch
+                for spot_idx in range(start_idx, end_idx):
+                    x = x_coords[spot_idx]
+                    y = y_coords[spot_idx]
+                    grid_idx = grid.width * (x - grid.x_min) + (y - grid.y_min)
+
+                    # Get non-zero entries for this spot (efficient)
+                    spot_data = adata_matrix[spot_idx, :]
+                    if sparse.isspmatrix(spot_data):
+                        spot_data = spot_data.tocoo()
+                        adata_gene_indices = spot_data.col
+                        adata_gene_values = spot_data.data
+                    else:
+                        spot_data_arr = spot_data.toarray().flatten()
+                        adata_gene_indices = np.nonzero(spot_data_arr)[0]
+                        adata_gene_values = spot_data_arr[adata_gene_indices]
+
+                    # Map to reference genes (only process non-zero values)
+                    for i, adata_gene_idx in enumerate(adata_gene_indices):
+                        if adata_gene_idx in gene_idx_dict:
+                            ref_gene_idx = gene_idx_dict[adata_gene_idx]
+                            row_indices.append(grid_idx)
+                            col_indices.append(ref_gene_idx)
+                            data_values.append(adata_gene_values[i])
+
+                    # Update progress bar
+                    pbar.update(1)
+
+        print(f"{Colors.GREEN}        ✓ Collected {len(data_values):,} non-zero values{Colors.ENDC}")
+
+        # Step 5: Create sparse matrix from COO format (most memory efficient)
+        print(f"{Colors.CYAN}  [5/5] Creating sparse matrix from {len(data_values):,} non-zero values...{Colors.ENDC}")
+
+        # Convert lists to numpy arrays for faster sparse matrix creation
+        print(f"{Colors.BLUE}        → Converting to numpy arrays...{Colors.ENDC}")
+        row_indices = np.array(row_indices, dtype=np.int32)
+        col_indices = np.array(col_indices, dtype=np.int32)
+        data_values = np.array(data_values, dtype=np.float32)
+        print(f"{Colors.GREEN}        ✓ Arrays ready{Colors.ENDC}")
+
+        # Create sparse matrix
+        print(f"{Colors.BLUE}        → Building sparse matrix...{Colors.ENDC}")
+        grid.matrix = sparse.coo_matrix(
+            (data_values, (row_indices, col_indices)),
+            shape=(n_grid_spots, len(genes))
+        ).tocsc()
+
+        sparsity = (1 - grid.matrix.nnz / (n_grid_spots * len(genes))) * 100
+        print(f"{Colors.GREEN}        ✓ Matrix created! Non-zero: {grid.matrix.nnz:,}, Sparsity: {sparsity:.2f}%{Colors.ENDC}")
+
+        print(f"{Colors.GREEN}{EMOJI['done']} ExpressionGrid created successfully!{Colors.ENDC}")
+        return grid
+
+    def __init__(self,
+                 table,
+                 genes: Sequence[str],
+                 gene_col: str = "gene",
+                 count_col: str = "count"
+                 ):
+        """Inits grid with expression readingsfrom a dataframe.
+
+        Args:
+            table: A dataframe of spot-level gene counts.
+                Each row in the dataframe corresponds to a reading of one
+                gene at one spot.
+                Columns:
+                    x: The x coordinate of the reading.
+                    y: The y coordinate of the reading.
+                    {gene_col}: The gene detected by the reading.
+                    {count_col}: The number of transcripts measured.
+            genes:
+                A full list of all genes under consideration, in order. This
+                should match the list of genes used for other CountData
+                intended to be compared with this sample.
+            gene_col:
+                A string labelling the column containing gene names.
+            count_col:
+                A string labelling the column containing transcript counts.
+        """
+        print(f"{Colors.CYAN}{EMOJI['grid']} Initializing expression grid...{Colors.ENDC}")
+        self.x_min, self.x_max = table.x.min(), table.x.max()
+        self.y_min, self.y_max = table.y.min(), table.y.max()
+        self.height: int = self.x_max - self.x_min + 1
+        self.width: int = self.y_max - self.y_min + 1
+        num_genes = len(genes)
+        print(f"{Colors.BLUE}  → Grid size: {self.height}x{self.width}, Genes: {num_genes}{Colors.ENDC}")
+        matrix = sparse.lil_matrix(((self.height) * (self.width),
+                                   num_genes)
+                                   )
+        for row in tqdm(table.itertuples(), total=len(table), desc=f"{Colors.BLUE}Building matrix{Colors.ENDC}"):
+            matrix[self._flatten_coords(row.x, row.y),
+                   genes.index(getattr(row, gene_col))
+                   ] = getattr(row, count_col)
+        self.matrix = matrix.tocsc()
+        self.num_genes = cast(int, num_genes)
+        print(f"{Colors.GREEN}{EMOJI['done']} Expression grid initialized!{Colors.ENDC}")
+
+    def rows(self) -> range:
+        """Returns a range of all row indices in the grid."""
+        return range(self.x_min, self.x_max+1)
+
+    def cols(self) -> range:
+        """Returns a range of all column indices in the grid."""
+        return range(self.y_min, self.y_max+1)
+
+    def _flatten_coords(self, i: int, j: int) -> int:
+        return self.width * (i - self.x_min) + (j - self.y_min)
+
+    def _flatten_coords_vec(self, coords) -> npt.ArrayLike:
+        return ((self.width, 1) * (coords - (self.x_min, self.y_min))).sum(axis=1)
+
+    def expression(self, *coords: tuple[(int, int)]) -> sparse.spmatrix:
+        """The total expression at these coordinates in the grid"""
+        return self.matrix[list(map(lambda p: self._flatten_coords(*p),
+                                    coords
+                                    ))].sum(axis=0)
+
+    def expression_vec(self, coords: npt.NDArray) -> sparse.spmatrix:
+        flattened = self._flatten_coords_vec(coords)
+        return self.matrix[flattened].sum(axis=0)
+
+    def expression_flat(self, flattened: npt.ArrayLike) -> npt.NDArray:
+        """Total expression for pre-flattened grid indices."""
+        expr = self.matrix[np.asarray(flattened, dtype=np.int64)].sum(axis=0)
+        return np.asarray(expr).ravel()
+
+    def square_nbhd(self,
+                    i: int,
+                    j: int,
+                    scale: int
+                    ) -> Iterator[tuple[int, int]]:
+        """All coordinates (x,y) in the grid such that d(x,i), d(y-j) <= scale"""
+        return square_nbhd((i, j), scale, (self.x_min, self.x_max),
+                           (self.y_min, self.y_max))
+
+    def square_nbhd_vec(self, i: int, j: int, scale: int) -> npt.NDArray:
+        return square_nbhd_vec((i, j), scale, (self.x_min, self.x_max),
+                               (self.y_min, self.y_max))
+
+    def square_nbhd_flat(self, i: int, j: int, scale: int) -> npt.NDArray:
+        """Flattened indices for square neighborhood around (i, j)."""
+        x0 = max(self.x_min, i - scale)
+        x1 = min(self.x_max, i + scale)
+        y0 = max(self.y_min, j - scale)
+        y1 = min(self.y_max, j + scale)
+        if x1 < x0 or y1 < y0:
+            return np.empty((0,), dtype=np.int64)
+        x = np.arange(x0, x1 + 1, dtype=np.int64) - self.x_min
+        y = np.arange(y0, y1 + 1, dtype=np.int64) - self.y_min
+        return (x[:, None] * self.width + y[None, :]).ravel()
+
+
+class SharedSparseMatrix:
+    """Wrapper for sharing scipy sparse CSC matrices via shared memory."""
+
+    def __init__(self, matrix: sparse.csc_matrix):
+        """Create shared memory from CSC matrix."""
+        if not sparse.isspmatrix_csc(matrix):
+            matrix = matrix.tocsc()
+
+        # Store metadata
+        self.shape = matrix.shape
+        self.dtype = matrix.dtype
+
+        # Create shared memory for each CSC array
+        self.data_shm = SharedMemory(create=True, size=matrix.data.nbytes)
+        self.indices_shm = SharedMemory(create=True, size=matrix.indices.nbytes)
+        self.indptr_shm = SharedMemory(create=True, size=matrix.indptr.nbytes)
+
+        # Copy data to shared memory
+        shm_data = np.ndarray(matrix.data.shape, dtype=matrix.data.dtype, buffer=self.data_shm.buf)
+        shm_indices = np.ndarray(matrix.indices.shape, dtype=matrix.indices.dtype, buffer=self.indices_shm.buf)
+        shm_indptr = np.ndarray(matrix.indptr.shape, dtype=matrix.indptr.dtype, buffer=self.indptr_shm.buf)
+
+        np.copyto(shm_data, matrix.data)
+        np.copyto(shm_indices, matrix.indices)
+        np.copyto(shm_indptr, matrix.indptr)
+
+        # Store array metadata
+        self.data_shape = matrix.data.shape
+        self.indices_shape = matrix.indices.shape
+        self.indptr_shape = matrix.indptr.shape
+        self.data_dtype = matrix.data.dtype
+        self.indices_dtype = matrix.indices.dtype
+        self.indptr_dtype = matrix.indptr.dtype
+
+    def get_names(self):
+        """Get shared memory names for child processes."""
+        return {
+            'data_name': self.data_shm.name,
+            'indices_name': self.indices_shm.name,
+            'indptr_name': self.indptr_shm.name,
+            'shape': self.shape,
+            'dtype': self.dtype,
+            'data_shape': self.data_shape,
+            'indices_shape': self.indices_shape,
+            'indptr_shape': self.indptr_shape,
+            'data_dtype': self.data_dtype,
+            'indices_dtype': self.indices_dtype,
+            'indptr_dtype': self.indptr_dtype,
+        }
+
+    def cleanup(self):
+        """Release shared memory."""
+        self.data_shm.close()
+        self.indices_shm.close()
+        self.indptr_shm.close()
+        self.data_shm.unlink()
+        self.indices_shm.unlink()
+        self.indptr_shm.unlink()
+
+
+class Worker(Process):
+
+    def __init__(self,
+                 grid_or_shm_names,  # Can be ExpressionGrid or shared memory names dict
+                 min_scale: int,
+                 max_scale: int,
+                 classifier: Classifier,
+                 job_queue: Queue,
+                 res_queue: Queue,
+                 procid: int,
+                 verbose: bool,
+                 use_shared_memory: bool = False,
+                 batch_size: int = 1000
+                 ):
+        super().__init__()
+        self.grid_or_shm_names = grid_or_shm_names
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+        self.classifier = classifier
+        self.job_queue = job_queue
+        self.res_queue = res_queue
+        self.procid = procid
+        self.verbose = verbose
+        self.use_shared_memory = use_shared_memory
+        self.batch_size = batch_size
+
+    def run(self):
+        simplefilter(action='ignore', category=FutureWarning)
+        if self.verbose:
+            print(f'{Colors.CYAN}{EMOJI["process"]} Worker {self.procid} started (batch_size={self.batch_size}){Colors.ENDC}')
+
+        # Reconstruct grid from shared memory or use directly
+        if self.use_shared_memory:
+            names = self.grid_or_shm_names
+            # Attach to shared memory
+            data_shm = SharedMemory(name=names['data_name'])
+            indices_shm = SharedMemory(name=names['indices_name'])
+            indptr_shm = SharedMemory(name=names['indptr_name'])
+
+            # Reconstruct arrays
+            data = np.ndarray(names['data_shape'], dtype=names['data_dtype'], buffer=data_shm.buf)
+            indices = np.ndarray(names['indices_shape'], dtype=names['indices_dtype'], buffer=indices_shm.buf)
+            indptr = np.ndarray(names['indptr_shape'], dtype=names['indptr_dtype'], buffer=indptr_shm.buf)
+
+            # Reconstruct sparse matrix
+            matrix = sparse.csc_matrix((data, indices, indptr), shape=names['shape'])
+
+            # Create a minimal grid-like object
+            class GridLike:
+                def __init__(self, matrix, names):
+                    self.matrix = matrix
+                    self.x_min = names['x_min']
+                    self.y_min = names['y_min']
+                    self.x_max = names['x_max']
+                    self.y_max = names['y_max']
+                    self.width = names['width']
+                    self.num_genes = names['num_genes']
+
+                def cols(self):
+                    return range(self.y_min, self.y_max + 1)
+
+                def expression_vec(self, coords):
+                    flattened = ((self.width, 1) * (coords - (self.x_min, self.y_min))).sum(axis=1)
+                    return self.matrix[flattened].sum(axis=0)
+
+                def square_nbhd_vec(self, i, j, scale):
+                    return square_nbhd_vec((i, j), scale, (self.x_min, self.x_max), (self.y_min, self.y_max))
+
+                def expression_flat(self, flattened):
+                    expr = self.matrix[np.asarray(flattened, dtype=np.int64)].sum(axis=0)
+                    return np.asarray(expr).ravel()
+
+                def square_nbhd_flat(self, i, j, scale):
+                    x0 = max(self.x_min, i - scale)
+                    x1 = min(self.x_max, i + scale)
+                    y0 = max(self.y_min, j - scale)
+                    y1 = min(self.y_max, j + scale)
+                    if x1 < x0 or y1 < y0:
+                        return np.empty((0,), dtype=np.int64)
+                    x = np.arange(x0, x1 + 1, dtype=np.int64) - self.x_min
+                    y = np.arange(y0, y1 + 1, dtype=np.int64) - self.y_min
+                    return (x[:, None] * self.width + y[None, :]).ravel()
+
+            grid = GridLike(matrix, names)
+            shm_refs = (data_shm, indices_shm, indptr_shm)
+        else:
+            grid = self.grid_or_shm_names
+            shm_refs = None
+
+        num_classes = len(self.classifier.classes)
+        cols = list(grid.cols())
+        num_scales = self.max_scale - self.min_scale + 1
+
+        # Batch processing: accumulate spots before classification
+        batch_spots = []  # List of (i, j, exprs, first_nonzero) tuples
+        scales = list(range(self.min_scale, self.max_scale + 1))
+
+        for i, col_values in iter(self.job_queue.get, None):
+            if self.verbose:
+                print(f"{Colors.BLUE}  → Worker {self.procid} processing row {i} ({len(col_values)} spots){Colors.ENDC}")
+
+            for col_index in col_values:
+                j = cols[col_index]
+
+                # Compute expressions for all scales
+                exprs = np.zeros((num_scales, grid.num_genes), dtype=np.float32)
+                for scale_idx, scale in enumerate(scales):
+                    flat_idx = grid.square_nbhd_flat(i, j, scale)
+                    exprs[scale_idx] = grid.expression_flat(flat_idx).astype(np.float32, copy=False)
+
+                first_nonzero = first_nonzero_1d(exprs.sum(axis=1))
+
+                # Add to batch
+                batch_spots.append((i, j, exprs, first_nonzero))
+
+                # Process batch when it reaches batch_size
+                if len(batch_spots) >= self.batch_size:
+                    self._process_batch(batch_spots, num_scales, num_classes)
+                    batch_spots = []
+
+        # Process remaining spots in batch
+        if len(batch_spots) > 0:
+            self._process_batch(batch_spots, num_scales, num_classes)
+
+        # Clean up shared memory references
+        if shm_refs:
+            for shm in shm_refs:
+                shm.close()
+
+        self.res_queue.put(None)
+        if self.verbose:
+            print(f'{Colors.GREEN}{EMOJI["done"]} Worker {self.procid} finished{Colors.ENDC}')
+
+    def _process_batch(self, batch_spots, num_scales, num_classes):
+        """Process a batch of spots together for efficiency.
+
+        Args:
+            batch_spots: List of (i, j, exprs, first_nonzero) tuples
+            num_scales: Number of scales
+            num_classes: Number of cell type classes
+        """
+        if len(batch_spots) == 0:
+            return
+
+        # Collect all samples to classify across all spots in batch
+        samples_to_classify = []
+        sample_metadata = []  # (spot_idx, scale_idx) for each sample
+
+        for spot_idx, (i, j, exprs, first_nonzero) in enumerate(batch_spots):
+            if 0 <= first_nonzero < num_scales:
+                # Add all scales from first_nonzero onwards
+                for scale_idx in range(first_nonzero, num_scales):
+                    samples_to_classify.append(exprs[scale_idx])
+                    sample_metadata.append((spot_idx, scale_idx))
+
+        # Batch classify all samples at once (CRITICAL OPTIMIZATION)
+        if len(samples_to_classify) > 0:
+            to_classify = np.vstack(samples_to_classify)
+            all_confidences = self.classifier.classify(to_classify, silent=True)
+
+            # Distribute results back to spots
+            result_idx = 0
+            for spot_idx, (i, j, exprs, first_nonzero) in enumerate(batch_spots):
+                probs = np.empty((num_scales, num_classes))
+                probs[:] = -1
+
+                if 0 <= first_nonzero < num_scales:
+                    # Count how many samples belong to this spot
+                    num_samples_for_spot = num_scales - first_nonzero
+                    # Extract this spot's results
+                    spot_confidences = all_confidences[result_idx:result_idx + num_samples_for_spot]
+                    probs[first_nonzero:] = spot_confidences
+                    result_idx += num_samples_for_spot
+
+                self.res_queue.put((i, j, probs.tolist()))
+        else:
+            # No samples to classify, send empty results
+            for i, j, exprs, first_nonzero in batch_spots:
+                probs = np.empty((num_scales, num_classes))
+                probs[:] = -1
+                self.res_queue.put((i, j, probs.tolist()))
+
+
+class CountGrid(CountTable):
+    """A spatial transcriptomics object with associated methods.
+
+    Attributes:
+        grid: An expression grid.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Inits spatial data with values from a dataframe."""
+        # Check if a pre-built grid is provided (for memory efficiency)
+        _prebuilt_grid = kwargs.pop('_prebuilt_grid', None)
+
+        print(f"{Colors.HEADER}{EMOJI['spatial']} Initializing spatial CountGrid...{Colors.ENDC}")
+        super().__init__(*args, **kwargs)
+
+        if _prebuilt_grid is not None:
+            # Use the pre-built grid (efficient path from AnnData)
+            print(f"{Colors.BLUE}  → Using pre-built expression grid (skipping rebuild){Colors.ENDC}")
+            self.grid = _prebuilt_grid
+            self.height, self.width = self.grid.height, self.grid.width
+        else:
+            # Build grid from table (standard path)
+            self.generate_expression_grid()
+            self.height, self.width = self.grid.height, self.grid.width
+
+        print(f"{Colors.GREEN}{EMOJI['done']} CountGrid initialized! Grid dimensions: {self.height}×{self.width}{Colors.ENDC}")
+
+    @classmethod
+    def from_coord_table(cls, table, **kwargs):
+        # Check if input is AnnData object
+        is_anndata = False
+        try:
+            from anndata import AnnData
+            is_anndata = isinstance(table, AnnData)
+        except ImportError:
+            pass
+
+        if is_anndata:
+            print(f"{Colors.HEADER}{EMOJI['spatial']} Creating CountGrid from AnnData spatial object (efficient mode)...{Colors.ENDC}")
+            adata = table
+            print(f"{Colors.BLUE}AnnData info: {adata.n_obs:,} spots × {adata.n_vars:,} genes{Colors.ENDC}")
+
+            # Extract genes from kwargs
+            if 'genes' not in kwargs:
+                raise ValueError("Must provide 'genes' parameter when using AnnData input")
+
+            genes = kwargs['genes']
+            print(f"{Colors.BLUE}Reference genes: {len(genes):,}{Colors.ENDC}")
+
+            # Extract spatial coordinates
+            print(f"\n{Colors.CYAN}{'─'*60}{Colors.ENDC}")
+            print(f"{Colors.CYAN}Step 1: Extracting spatial information{Colors.ENDC}")
+            print(f"{Colors.CYAN}{'─'*60}{Colors.ENDC}")
+
+            if 'spatial' in adata.obsm:
+                print(f"{Colors.BLUE}  → Source: adata.obsm['spatial']{Colors.ENDC}")
+                spatial_coords = adata.obsm['spatial']
+                x_coords_array = np.round(spatial_coords[:, 0]).astype(int)
+                y_coords_array = np.round(spatial_coords[:, 1]).astype(int)
+            elif 'x' in adata.obs.columns and 'y' in adata.obs.columns:
+                print(f"{Colors.BLUE}  → Source: adata.obs['x'] and adata.obs['y']{Colors.ENDC}")
+                x_coords_array = np.round(adata.obs['x'].values).astype(int)
+                y_coords_array = np.round(adata.obs['y'].values).astype(int)
+            else:
+                raise ValueError("AnnData object must have spatial coordinates in adata.obsm['spatial'] or adata.obs['x'/'y']")
+
+            # Get coordinate bounds
+            x_min, x_max = int(x_coords_array.min()), int(x_coords_array.max())
+            y_min, y_max = int(y_coords_array.min()), int(y_coords_array.max())
+
+            print(f"{Colors.GREEN}  ✓ Coordinate range: X[{x_min}, {x_max}], Y[{y_min}, {y_max}]{Colors.ENDC}")
+
+            # Calculate grid dimensions (but don't create all positions!)
+            print(f"\n{Colors.CYAN}Step 2: Calculating grid dimensions{Colors.ENDC}")
+            grid_height = x_max - x_min + 1
+            grid_width = y_max - y_min + 1
+            total_grid_positions = grid_height * grid_width
+            print(f"{Colors.GREEN}  ✓ Grid dimensions: {grid_height} × {grid_width} = {total_grid_positions:,} positions{Colors.ENDC}")
+            print(f"{Colors.BLUE}  → Occupied spots: {adata.n_obs:,} ({adata.n_obs/total_grid_positions*100:.2f}%){Colors.ENDC}")
+            print(f"{Colors.WARNING}  ⚠ Only creating sample IDs for {adata.n_obs:,} actual spots (not all {total_grid_positions:,} positions){Colors.ENDC}")
+
+            # Create ExpressionGrid directly from AnnData (efficient!)
+            print(f"\n{Colors.CYAN}{'─'*60}{Colors.ENDC}")
+            print(f"{Colors.CYAN}Step 3: Building expression grid (this is the main step){Colors.ENDC}")
+            print(f"{Colors.CYAN}{'─'*60}{Colors.ENDC}")
+            expression_grid = ExpressionGrid.from_anndata(adata, genes)
+
+            # Create sample IDs ONLY for actual spots (memory efficient!)
+            print(f"\n{Colors.CYAN}Step 4: Creating sample IDs for actual spots{Colors.ENDC}")
+            print(f"{Colors.BLUE}  → Generating {adata.n_obs:,} sample IDs...{Colors.ENDC}")
+            samples = [f'{x},{y}' for x, y in zip(x_coords_array, y_coords_array)]
+            print(f"{Colors.GREEN}  ✓ Created {len(samples):,} sample IDs{Colors.ENDC}")
+
+            # Create table with actual data
+            print(f"\n{Colors.CYAN}Step 5: Initializing CountGrid structure{Colors.ENDC}")
+            print(f"{Colors.BLUE}  → Building data table...{Colors.ENDC}")
+
+            # Build table from actual spots (not a minimal table)
+            table_data = {
+                'sample': samples,
+                'gene': [genes[0]] * adata.n_obs,  # Placeholder gene
+                'count': [0] * adata.n_obs,  # Placeholder counts
+                'x': x_coords_array,
+                'y': y_coords_array
+            }
+            full_table = pd.DataFrame(table_data)
+            print(f"{Colors.GREEN}  ✓ Table created with {len(full_table):,} rows{Colors.ENDC}")
+
+            # Set kwargs for table-based initialization
+            kwargs['genes'] = genes
+            kwargs['gene_col'] = 'gene'
+            kwargs['sample_col'] = 'sample'
+            kwargs['count_col'] = 'count'
+            # CRITICAL: Pass the pre-built grid to avoid rebuilding (memory efficient!)
+            kwargs['_prebuilt_grid'] = expression_grid
+
+            # Create CountGrid using actual spots
+            # The __init__ will use the pre-built grid instead of rebuilding
+            print(f"{Colors.BLUE}  → Initializing CountGrid with pre-built grid...{Colors.ENDC}")
+            count_grid = cls(full_table, samples=samples, **kwargs)
+            print(f"{Colors.GREEN}  ✓ CountGrid initialized (using efficient pre-built grid){Colors.ENDC}")
+
+            # Metadata already includes x, y from the table
+            print(f"{Colors.GREEN}  ✓ Spatial metadata already included{Colors.ENDC}")
+
+            print(f"\n{Colors.GREEN}{'='*60}{Colors.ENDC}")
+            print(f"{Colors.GREEN}{EMOJI['done']} CountGrid created successfully!{Colors.ENDC}")
+            print(f"{Colors.GREEN}{'='*60}{Colors.ENDC}")
+            print(f"{Colors.BLUE}Final grid dimensions: {count_grid.height} × {count_grid.width}{Colors.ENDC}")
+            print(f"{Colors.BLUE}Matrix shape: {count_grid.grid.matrix.shape}{Colors.ENDC}")
+            print(f"{Colors.BLUE}Non-zero values: {count_grid.grid.matrix.nnz:,}{Colors.ENDC}")
+            print()
+            return count_grid
+
+        # Original DataFrame path
+        x_coords = range(table.x.min(), table.x.max() + 1)
+        y_coords = range(table.y.min(), table.y.max() + 1)
+
+        coords = itertools.product(x_coords, y_coords)
+        samples = map(combine_coords, coords)
+
+        new_table = table.copy()
+        new_table['sample'] = new_table.apply(lambda row: f'{row.x},{row.y}',
+                                              axis=1)
+
+        count_grid = cls(new_table, samples=list(samples), **kwargs)
+        samples = count_grid.samples
+        x_coords = {sample: first_coord(sample) for sample in samples}
+        y_coords = {sample: second_coord(sample) for sample in samples}
+        count_grid.add_metadata('x', x_coords)
+        count_grid.add_metadata('y', y_coords)
+        return count_grid
+
+    def get_nonzero_spots(self) -> set[tuple[int, int]]:
+        """Get all (i, j) coordinates with non-zero expression.
+
+        Returns:
+            Set of (i, j) tuples representing spots with expression data.
+        """
+        matrix_coo = self.grid.matrix.tocoo()
+        nonzero_spots = set()
+
+        for row_idx in set(matrix_coo.row):
+            i = row_idx // self.grid.width + self.grid.x_min
+            j = row_idx % self.grid.width + self.grid.y_min
+            nonzero_spots.add((i, j))
+
+        return nonzero_spots
+
+    def get_spots_with_nearby_data(self, max_radius: int) -> set[tuple[int, int]]:
+        """Get all (i, j) coordinates that have data within max_radius distance.
+
+        This includes:
+        1. Spots with their own expression data
+        2. Spots whose neighborhood (within max_radius) contains other spots with data
+
+        Args:
+            max_radius: Maximum neighborhood radius (typically max_scale)
+
+        Returns:
+            Set of (i, j) tuples that should be classified
+        """
+        # First, get all spots with data
+        nonzero_spots = self.get_nonzero_spots()
+
+        # Expand to include all positions within max_radius of any data spot
+        spots_to_classify = set()
+
+        for i, j in nonzero_spots:
+            # Add the spot itself and all positions within max_radius
+            for di in range(-max_radius, max_radius + 1):
+                for dj in range(-max_radius, max_radius + 1):
+                    ni = i + di
+                    nj = j + dj
+                    # Check if within grid bounds
+                    if (self.grid.x_min <= ni <= self.grid.x_max and
+                        self.grid.y_min <= nj <= self.grid.y_max):
+                        spots_to_classify.add((ni, nj))
+
+        return spots_to_classify
+
+    def pseudobulk(self) -> npt.NDArray:
+        return np.array(self.grid.matrix.sum(axis=0))[0]
+
+    def count_matrix(self) -> npt.NDArray:
+        # It's tempting to try and do something clever with numpy or pandas
+        # here. There be dragons.
+        x_min = self.table.x.min()
+        y_min = self.table.y.min()
+        count_matrix = np.zeros((self.width, self.height))
+        counts = self.table.groupby(['x', 'y']).sum().reset_index()
+        count_index = self.table.columns.get_loc(self.count_col)
+        for row in counts.itertuples():
+            count_matrix[row.y-y_min, row.x-x_min] += row[count_index]
+        return count_matrix
+
+    def density_mask(self, radius: int, threshold: int) -> npt.NDArray:
+        return density_hull(self.count_matrix(), radius, threshold)
+
+    def generate_expression_grid(self):
+        # Skip if grid already exists (e.g., created from AnnData)
+        if hasattr(self, 'grid') and self.grid is not None:
+            print(f"{Colors.BLUE}  → Using existing ExpressionGrid{Colors.ENDC}")
+            return
+
+        self.grid = ExpressionGrid(self.table,
+                                   genes=self.genes,
+                                   gene_col=self.gene_col,
+                                   count_col=self.count_col
+                                   )
+
+    def _build_neighborhood_operator(self,
+                                     spots: list[tuple[int, int]],
+                                     scale: int
+                                     ) -> sparse.csr_matrix:
+        """Build sparse operator A mapping grid -> neighborhood sums for one scale."""
+        n_rows = len(spots)
+        n_cols = self.grid.height * self.grid.width
+        if n_rows == 0:
+            return sparse.csr_matrix((0, n_cols), dtype=np.float32)
+
+        row_idx: list[int] = []
+        col_idx: list[int] = []
+
+        for r, (i, j) in enumerate(spots):
+            flat = self.grid.square_nbhd_flat(i, j, scale)
+            if flat.size == 0:
+                continue
+            row_idx.extend([r] * int(flat.size))
+            col_idx.extend(flat.tolist())
+
+        if len(col_idx) == 0:
+            return sparse.csr_matrix((n_rows, n_cols), dtype=np.float32)
+
+        data = np.ones(len(col_idx), dtype=np.float32)
+        return sparse.csr_matrix(
+            (data, (np.asarray(row_idx, dtype=np.int32), np.asarray(col_idx, dtype=np.int64))),
+            shape=(n_rows, n_cols),
+            dtype=np.float32
+        )
+
+    def classify_parallel(self,
+                          classifier: Classifier,
+                          min_scale: int,
+                          max_scale: int,
+                          outfile: str | None = None,
+                          mask: npt.NDArray | None = None,
+                          num_proc: int = 1,
+                          verbose: bool = False,
+                          only_nonzero: bool = True,
+                          include_neighborhood: bool = True,
+                          use_sparse_operator: bool = False,
+                          operator_chunk_size: int = 2000,
+                          use_shared_memory: bool = True,
+                          return_dict: bool = False,
+                          batch_size: int = 1000
+                          ):
+
+        print(f"{Colors.HEADER}{EMOJI['spatial']} Starting parallel spatial classification...{Colors.ENDC}")
+        print(f"{Colors.CYAN}  → Scales: {min_scale}-{max_scale}, Processes: {num_proc}, Batch size: {batch_size}{Colors.ENDC}")
+        print(f"{Colors.GREEN}  → Batch processing enabled: {batch_size} spots per batch for GPU acceleration{Colors.ENDC}")
+        if use_sparse_operator:
+            print(f"{Colors.GREEN}  → Sparse operator mode enabled (A_s @ grid.matrix){Colors.ENDC}")
+        if num_proc == 1 and use_shared_memory:
+            print(f"{Colors.BLUE}  → Single-process mode detected: disabling shared memory{Colors.ENDC}")
+            use_shared_memory = False
+
+        # Setup shared memory if requested
+        shared_matrix = None
+        shm_names = None
+        if use_shared_memory:
+            print(f"{Colors.CYAN}  → Creating shared memory for matrix (avoiding serialization)...{Colors.ENDC}")
+            matrix_size_mb = (self.grid.matrix.data.nbytes +
+                            self.grid.matrix.indices.nbytes +
+                            self.grid.matrix.indptr.nbytes) / (1024**2)
+            print(f"{Colors.BLUE}    • Matrix size: {matrix_size_mb:.1f} MB{Colors.ENDC}")
+
+            try:
+                shared_matrix = SharedSparseMatrix(self.grid.matrix)
+                shm_names = shared_matrix.get_names()
+                # Add grid metadata
+                shm_names.update({
+                    'x_min': self.grid.x_min,
+                    'y_min': self.grid.y_min,
+                    'x_max': self.grid.x_max,
+                    'y_max': self.grid.y_max,
+                    'width': self.grid.width,
+                    'num_genes': self.grid.num_genes,
+                })
+                print(f"{Colors.GREEN}    ✓ Shared memory created (workers access directly){Colors.ENDC}")
+            except Exception as e:
+                print(f"{Colors.WARNING}    ⚠ Shared memory creation failed: {e}{Colors.ENDC}")
+                print(f"{Colors.WARNING}    → Falling back to traditional serialization{Colors.ENDC}")
+                use_shared_memory = False
+
+        # Setup output storage
+        shape = (self.grid.height,
+                 self.grid.width,
+                 max_scale - min_scale + 1,
+                 len(classifier.classes)
+                 )
+
+        if return_dict:
+            # Memory-efficient mode: store only non-empty results
+            print(f"{Colors.GREEN}  → Using memory-efficient dict mode (no file I/O){Colors.ENDC}")
+            result_dict = {}
+            result = None
+        else:
+            # Traditional mode: use memory-mapped file
+            if outfile is None:
+                raise ValueError("outfile is required when return_dict=False")
+            outfile += '' if outfile[-4:] == '.npy' else '.npy'
+            print(f"{Colors.BLUE}  → Output shape: {shape}, File: {outfile}{Colors.ENDC}")
+            result = np.lib.format.open_memmap(outfile, dtype=np.float32,
+                                               mode='w+', shape=shape)
+            result[:] = np.nan
+            result.flush()
+            result_dict = None
+
+        job_queue: Queue[tuple[int, list[int]] | None] = Queue()
+        res_queue: Queue[tuple[int, int, list[list[int]]] | None] = Queue()
+
+        if mask is not None:
+            mask = mask.T
+            if mask.shape != (self.height, self.width):
+                raise ValueError(f'Mask has shape {mask.shape} but expected {(self.height, self.width)}')
+            col_values = [[j for j in range(self.width) if mask[i, j] == 1] for i in range(self.height)]
+            print(f"{Colors.WARNING}  → Using mask for spot selection{Colors.ENDC}")
+        elif only_nonzero:
+            # CRITICAL OPTIMIZATION: Only classify spots with data in their neighborhood
+            print(f"{Colors.CYAN}  → Identifying spots to classify (including neighborhoods)...{Colors.ENDC}")
+
+            # Get spots with data
+            nonzero_spots = self.get_nonzero_spots()
+            print(f"{Colors.BLUE}    • Found {len(nonzero_spots):,} spots with expression data{Colors.ENDC}")
+
+            if include_neighborhood:
+                # Expand to include neighborhoods (within max_scale radius)
+                print(f"{Colors.BLUE}    • Expanding to include neighborhoods (max_scale={max_scale})...{Colors.ENDC}")
+                spots_to_classify = self.get_spots_with_nearby_data(max_scale)
+            else:
+                print(f"{Colors.BLUE}    • Using only observed spots (no neighborhood expansion){Colors.ENDC}")
+                spots_to_classify = nonzero_spots
+            print(f"{Colors.GREEN}    • Total spots to classify: {len(spots_to_classify):,}{Colors.ENDC}")
+
+            # Group by row (i coordinate)
+            from collections import defaultdict
+            row_to_cols = defaultdict(list)
+            for i, j in spots_to_classify:
+                row_to_cols[i].append(j - self.grid.y_min)  # Store as index relative to y_min
+
+            # Create col_values array
+            col_values = []
+            for i in range(self.grid.height):
+                actual_i = i + self.grid.x_min
+                if actual_i in row_to_cols:
+                    col_values.append(sorted(row_to_cols[actual_i]))
+                else:
+                    col_values.append([])
+
+            total_grid_positions = self.grid.height * self.grid.width
+            reduction_pct = (1 - len(spots_to_classify) / total_grid_positions) * 100
+            speedup = total_grid_positions / max(len(spots_to_classify), 1)
+            print(f"{Colors.GREEN}  ✓ Optimization enabled: Classifying {len(spots_to_classify):,} spots (not {total_grid_positions:,}){Colors.ENDC}")
+            print(f"{Colors.GREEN}    → Includes {len(nonzero_spots):,} data spots + {max(0, len(spots_to_classify) - len(nonzero_spots)):,} neighborhood spots{Colors.ENDC}")
+            print(f"{Colors.GREEN}    → Reduction: {reduction_pct:.1f}% fewer spots{Colors.ENDC}")
+            print(f"{Colors.GREEN}    → Speedup estimate: {speedup:.0f}x faster{Colors.ENDC}")
+        else:
+            col_values = [list(range(self.width)) for _ in range(self.height)]
+            total_grid_positions = self.grid.height * self.grid.width
+            print(f"{Colors.WARNING}  ⚠ Optimization disabled: Classifying ALL grid positions ({total_grid_positions:,} spots){Colors.ENDC}")
+            print(f"{Colors.WARNING}    → Set only_nonzero=True to classify only spots with data{Colors.ENDC}")
+
+        print(f"{Colors.CYAN}{EMOJI['process']} Launching {num_proc} worker processes...{Colors.ENDC}")
+        workers = []
+        run_inline_worker = (num_proc == 1)
+        if run_inline_worker:
+            print(f"{Colors.BLUE}  → Using inline single-process worker (no multiprocessing overhead){Colors.ENDC}")
+        else:
+            for i in range(num_proc):
+                # Use shared memory names or grid object
+                grid_or_names = shm_names if use_shared_memory else self.grid
+
+                worker = Worker(grid_or_names,
+                               min_scale,
+                               max_scale,
+                               classifier,
+                               job_queue,
+                               res_queue,
+                               i,
+                               verbose,
+                               use_shared_memory,
+                               batch_size
+                               )
+                worker.start()
+                workers.append(worker)
+                print(f"{Colors.BLUE}  → Worker {i+1}/{num_proc} started (batch_size={batch_size}){Colors.ENDC}")
+
+        print(f"\n{Colors.CYAN}{EMOJI['grid']} Preparing classification jobs...{Colors.ENDC}")
+        num_spots = 0
+        num_rows = 0
+
+        for i in self.grid.rows():
+            index = i - self.grid.x_min
+            if len(col_values[index]) > 0:
+                job_queue.put((i, col_values[index]))
+                num_spots += len(col_values[index])
+                num_rows += 1
+
+        for _ in range(num_proc):
+            job_queue.put(None)
+
+        print(f"{Colors.GREEN}  ✓ Queued {num_rows:,} rows with {num_spots:,} spots for classification{Colors.ENDC}")
+        print(f"{Colors.BLUE}  → Scales to process: {max_scale - min_scale + 1}{Colors.ENDC}")
+        print(f"{Colors.BLUE}  → Classes: {len(classifier.classes)}{Colors.ENDC}")
+        print(f"{Colors.BLUE}  → Total classifications: {num_spots:,} × {max_scale - min_scale + 1} × {len(classifier.classes)} = {num_spots * (max_scale - min_scale + 1) * len(classifier.classes):,}{Colors.ENDC}")
+
+        if use_sparse_operator and num_proc == 1:
+            print(f"\n{Colors.CYAN}{EMOJI['classify']} Running sparse-operator single-process classification...{Colors.ENDC}")
+            query_spots: list[tuple[int, int]] = []
+            for i in self.grid.rows():
+                index = i - self.grid.x_min
+                if len(col_values[index]) > 0:
+                    for col_index in col_values[index]:
+                        query_spots.append((i, col_index + self.grid.y_min))
+
+            scales = list(range(min_scale, max_scale + 1))
+            num_scales = len(scales)
+            num_classes = len(classifier.classes)
+            n_grid = self.grid.height * self.grid.width
+            gsum = np.asarray(self.grid.matrix.sum(axis=1)).ravel().astype(np.float32)
+
+            pbar = tqdm(total=len(query_spots),
+                        desc=f"{Colors.CYAN}Classifying spots{Colors.ENDC}",
+                        ncols=120,
+                        unit='spot')
+
+            flush_counter = 0
+            for start in range(0, len(query_spots), operator_chunk_size):
+                end = min(start + operator_chunk_size, len(query_spots))
+                chunk = query_spots[start:end]
+                n_chunk = len(chunk)
+
+                # Pass 1: determine first nonzero scale using A_s @ total_counts.
+                row_sums = np.zeros((n_chunk, num_scales), dtype=np.float32)
+                for scale_idx, scale in enumerate(scales):
+                    A = self._build_neighborhood_operator(chunk, scale)
+                    if A.nnz == 0:
+                        continue
+                    row_sums[:, scale_idx] = np.asarray(A.dot(gsum)).ravel()
+
+                nonzero_mask = row_sums > 0
+                first_nonzero = np.full(n_chunk, -1, dtype=np.int32)
+                any_nonzero = nonzero_mask.any(axis=1)
+                first_nonzero[any_nonzero] = np.argmax(nonzero_mask[any_nonzero], axis=1)
+
+                chunk_probs = np.full((n_chunk, num_scales, num_classes), -1, dtype=np.float32)
+
+                # Pass 2: classify only required scales/spots via A_s @ grid.matrix
+                for scale_idx, scale in enumerate(scales):
+                    eligible = np.where((first_nonzero >= 0) & (first_nonzero <= scale_idx))[0]
+                    if eligible.size == 0:
+                        continue
+
+                    subset = [chunk[idx] for idx in eligible.tolist()]
+                    A = self._build_neighborhood_operator(subset, scale)
+                    if A.nnz == 0:
+                        continue
+
+                    X_scale = A.dot(self.grid.matrix)  # sparse matrix (eligible, genes)
+
+                    for b_start in range(0, eligible.size, batch_size):
+                        b_end = min(b_start + batch_size, eligible.size)
+                        idx_slice = eligible[b_start:b_end]
+                        probs = classifier.classify(X_scale[b_start:b_end], silent=True)
+                        chunk_probs[idx_slice, scale_idx, :] = probs
+
+                # Write outputs
+                for local_idx, (i, j) in enumerate(chunk):
+                    probs = chunk_probs[local_idx]
+                    if return_dict:
+                        result_dict[(i, j)] = probs
+                    else:
+                        result[i-self.grid.x_min, j-self.grid.y_min] = probs
+                    pbar.update(1)
+
+                if not return_dict:
+                    result.flush()
+                    flush_counter += 1
+
+            pbar.close()
+
+            if return_dict:
+                mem_mb = sum(arr.nbytes for arr in result_dict.values()) / (1024**2)
+            else:
+                result.flush()
+                mem_mb = result.nbytes / (1024**2)
+
+            print(f"\n{Colors.GREEN}{EMOJI['done']} Classification completed (sparse operator mode)!{Colors.ENDC}")
+            print(f"{Colors.BLUE}  → Processed: {len(query_spots):,} spots{Colors.ENDC}")
+            if return_dict:
+                print(f"{Colors.BLUE}  → Results stored in dict: {len(result_dict):,} spots{Colors.ENDC}")
+                print(f"{Colors.BLUE}  → Memory usage: ~{mem_mb:.1f} MB{Colors.ENDC}")
+                return result_dict
+            print(f"{Colors.BLUE}  → Results saved to: {outfile}{Colors.ENDC}")
+            print(f"{Colors.BLUE}  → File size: ~{mem_mb:.1f} MB{Colors.ENDC}")
+            return result
+
+        print(f"\n{Colors.CYAN}{EMOJI['classify']} Waiting for workers to process jobs...{Colors.ENDC}")
+        print(f"{Colors.WARNING}  ⏳ This may take a few seconds to start (workers are initializing)...{Colors.ENDC}")
+
+        inline_thread = None
+        if run_inline_worker:
+            # Run inline worker in a background thread so the main thread can
+            # update tqdm in real time while consuming results.
+            inline_worker = Worker(self.grid,
+                                  min_scale,
+                                  max_scale,
+                                  classifier,
+                                  job_queue,
+                                  res_queue,
+                                  0,
+                                  verbose,
+                                  False,
+                                  batch_size
+                                  )
+            inline_thread = threading.Thread(target=inline_worker.run, daemon=True)
+            inline_thread.start()
+
+        # Wait for first result to confirm workers are running
+        import time
+        start_time = time.time()
+        first_result_received = False
+
+        pbar = tqdm(total=num_spots,
+                   desc=f"{Colors.CYAN}Classifying spots{Colors.ENDC}",
+                   ncols=120,
+                   bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] {postfix}',
+                   unit='spot')
+
+        processed_spots = 0
+        flush_counter = 0
+
+        for msg_index in range(num_spots + num_proc):
+            res = res_queue.get()
+
+            # Announce when first result arrives
+            if not first_result_received:
+                elapsed = time.time() - start_time
+                print(f"\n{Colors.GREEN}  ✓ Workers started processing (initialization took {elapsed:.1f}s){Colors.ENDC}\n")
+                first_result_received = True
+
+            if res:
+                i, j, probs = res
+
+                if return_dict:
+                    # Store in dictionary (memory-efficient)
+                    result_dict[(i, j)] = np.array(probs, dtype=np.float32)
+                else:
+                    # Write to memmap file
+                    result[i-self.grid.x_min, j-self.grid.y_min] = probs
+
+                processed_spots += 1
+                pbar.update(1)
+
+                # Update postfix every 1000 spots
+                if processed_spots % 1000 == 0:
+                    pbar.set_postfix_str(f"Flushed: {flush_counter}x", refresh=True)
+
+                # Flush to disk periodically (only for file mode)
+                if not return_dict and msg_index % 5000 == 0:
+                    result.flush()
+                    flush_counter += 1
+                    if verbose:
+                        print(f"{Colors.BLUE}  → Flushed to disk ({processed_spots:,}/{num_spots:,} spots completed){Colors.ENDC}")
+
+        pbar.close()
+
+        if inline_thread is not None:
+            inline_thread.join()
+
+        # Finalize results
+        if return_dict:
+            # Calculate memory usage
+            mem_mb = sum(arr.nbytes for arr in result_dict.values()) / (1024**2)
+        else:
+            result.flush()
+            mem_mb = result.nbytes / (1024**2)
+
+        # Clean up shared memory
+        if shared_matrix is not None:
+            print(f"\n{Colors.CYAN}  → Cleaning up shared memory...{Colors.ENDC}")
+            try:
+                shared_matrix.cleanup()
+                print(f"{Colors.GREEN}    ✓ Shared memory released{Colors.ENDC}")
+            except Exception as e:
+                print(f"{Colors.WARNING}    ⚠ Warning: Shared memory cleanup issue: {e}{Colors.ENDC}")
+
+        print(f"\n{Colors.GREEN}{EMOJI['done']} Classification completed!{Colors.ENDC}")
+        print(f"{Colors.BLUE}  → Processed: {processed_spots:,} spots{Colors.ENDC}")
+
+        if return_dict:
+            print(f"{Colors.BLUE}  → Results stored in dict: {len(result_dict):,} spots{Colors.ENDC}")
+            print(f"{Colors.BLUE}  → Memory usage: ~{mem_mb:.1f} MB{Colors.ENDC}")
+            # Calculate potential savings
+            full_grid_mb = (shape[0] * shape[1] * shape[2] * shape[3] * 4) / (1024**2)
+            print(f"{Colors.GREEN}  → Saved ~{full_grid_mb - mem_mb:.1f} MB vs full grid ({(1 - mem_mb/full_grid_mb)*100:.1f}%){Colors.ENDC}")
+            return result_dict
+        else:
+            print(f"{Colors.BLUE}  → Results saved to: {outfile}{Colors.ENDC}")
+            print(f"{Colors.BLUE}  → File size: ~{mem_mb:.1f} MB{Colors.ENDC}")
+            return result
+
+    def annotate(self,
+                 confidence_matrix: npt.NDArray,
+                 threshold: float,
+                 labels: tuple[str, ...],
+                 column_label: str = "cell type"):
+
+        print(f"{Colors.CYAN}{EMOJI['cell']} Annotating spots with threshold={threshold}...{Colors.ENDC}")
+        classifications = extract_classifications(confidence_matrix, threshold)
+        print(f"{Colors.BLUE}  → Found {len(classifications)} confident classifications{Colors.ENDC}")
+        x_min, y_min = self.grid.x_min, self.grid.y_min
+        to_add = {combine_coords((x+x_min, y+y_min)): labels[c]
+                  for (x, y), c in classifications.items()
+                  }
+
+        self.add_metadata(column_label, to_add)
+        print(f"{Colors.GREEN}{EMOJI['done']} Annotation completed! Column '{column_label}' added to metadata{Colors.ENDC}")

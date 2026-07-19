@@ -28,15 +28,33 @@ class ScRNAseqTopBind:
         """初始化所有绑定"""
         self.bind_music_controls()
         self.bind_navigation()
+        self.bind_analysis_navigation()
         self.bind_data_loading()
 
     def bind_navigation(self):
         """绑定页面导航按钮"""
-        if hasattr(self.ui, 'btn_back_single_cell'):
-            self.ui.btn_back_single_cell.clicked.connect(page_intersect.go_to_home)
+        if hasattr(self.ui, 'nav_btn_back'):
+            self.ui.nav_btn_back.clicked.connect(page_intersect.go_to_home)
 
+        if hasattr(self.ui, 'nav_btn_data'):
+            self.ui.nav_btn_data.clicked.connect(lambda: self.ui.show_panel('data'))
+
+        if hasattr(self.ui, 'nav_btn_analysis'):
+            self.ui.nav_btn_analysis.clicked.connect(lambda: self.ui.show_panel('analysis'))
+
+        if hasattr(self.ui, 'nav_btn_genelist'):
+            self.ui.nav_btn_genelist.clicked.connect(lambda: self.ui.show_panel('genelist'))
+
+        if hasattr(self.ui, 'nav_btn_trajectory'):
+            self.ui.nav_btn_trajectory.clicked.connect(lambda: self.ui.show_panel('trajectory'))
+
+        if hasattr(self.ui, 'nav_btn_other'):
+            self.ui.nav_btn_other.clicked.connect(lambda: self.ui.show_panel('other'))
+
+    def bind_analysis_navigation(self):
+        """绑定分析工具按钮导航"""
         if hasattr(self.ui, 'btn_initial_analysis'):
-            self.ui.btn_initial_analysis.clicked.connect(lambda: page_intersect.go_to_page_with_bind('analysis_page'))
+            self.ui.btn_initial_analysis.clicked.connect(lambda: page_intersect.go_to_page_with_bind('sc_umap_initial_page'))
 
         if hasattr(self.ui, 'btn_violin_plot'):
             self.ui.btn_violin_plot.clicked.connect(lambda: page_intersect.go_to_page_with_bind('violin_page'))
@@ -52,6 +70,15 @@ class ScRNAseqTopBind:
 
         if hasattr(self.ui, 'btn_hdwgcna'):
             self.ui.btn_hdwgcna.clicked.connect(self.go_to_hdwgcna)
+
+        if hasattr(self.ui, 'btn_stavia'):
+            self.ui.btn_stavia.clicked.connect(self.go_to_stavia)
+
+        if hasattr(self.ui, 'btn_monocle'):
+            self.ui.btn_monocle.clicked.connect(self.go_to_monocle)
+
+        if hasattr(self.ui, 'btn_drug_sensitivity'):
+            self.ui.btn_drug_sensitivity.clicked.connect(self.go_to_drug_sensitivity)
 
     def bind_data_loading(self):
         """绑定数据加载相关控件"""
@@ -150,10 +177,19 @@ class ScRNAseqTopBind:
 
     def go_to_hdwgcna(self):
         """跳转到hdWGCNA分析页面"""
-        if not self.analysis.is_seurat_loaded():
-            attention(self.parent, "请先加载Seurat对象（rds文件）")
-            return
         page_intersect.go_to_page_with_bind('sc_hdwgcna_page')
+
+    def go_to_stavia(self):
+        """跳转到StaVIA分析页面"""
+        page_intersect.go_to_page_with_bind('sc_stavia_page')
+
+    def go_to_monocle(self):
+        """跳转到Monocle分析页面"""
+        page_intersect.go_to_page_with_bind('sc_monocle_page')
+
+    def go_to_drug_sensitivity(self):
+        """跳转到GDSC药物敏感性分析页面"""
+        page_intersect.go_to_page_with_bind('sc_gdsc_drug_sensitivity_page')
 
     def bind_music_controls(self):
         """绑定音乐控制"""

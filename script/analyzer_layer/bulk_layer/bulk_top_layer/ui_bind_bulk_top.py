@@ -29,12 +29,27 @@ class BulkTopBind:
         self.bind_music_controls()
         self.bind_navigation()
         self.bind_data_loading()
+        self.bind_analysis_navigation()
 
     def bind_navigation(self):
         """绑定页面导航按钮"""
-        if hasattr(self.ui, 'btn_back_bulk'):
-            self.ui.btn_back_bulk.clicked.connect(page_intersect.go_to_home)
+        if hasattr(self.ui, 'nav_btn_back'):
+            self.ui.nav_btn_back.clicked.connect(page_intersect.go_to_home)
 
+        if hasattr(self.ui, 'nav_btn_data'):
+            self.ui.nav_btn_data.clicked.connect(lambda: self.ui.show_panel('data'))
+
+        if hasattr(self.ui, 'nav_btn_analysis'):
+            self.ui.nav_btn_analysis.clicked.connect(lambda: self.ui.show_panel('analysis'))
+
+        if hasattr(self.ui, 'nav_btn_other'):
+            self.ui.nav_btn_other.clicked.connect(lambda: self.ui.show_panel('other'))
+
+        if hasattr(self.ui, 'nav_btn_genelist'):
+            self.ui.nav_btn_genelist.clicked.connect(lambda: self.ui.show_panel('genelist'))
+
+    def bind_analysis_navigation(self):
+        """绑定分析工具按钮导航"""
         if hasattr(self.ui, 'btn_expression'):
             self.ui.btn_expression.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_expr_page'))
 
@@ -43,6 +58,12 @@ class BulkTopBind:
 
         if hasattr(self.ui, 'btn_cox'):
             self.ui.btn_cox.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_cox_page'))
+
+        if hasattr(self.ui, 'btn_diff'):
+            self.ui.btn_diff.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_diff_page'))
+
+        if hasattr(self.ui, 'btn_logrank'):
+            self.ui.btn_logrank.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_logrank_page'))
 
         if hasattr(self.ui, 'btn_cluster'):
             self.ui.btn_cluster.clicked.connect(lambda: page_intersect.go_to_page_with_bind('bulk_cluster_page'))
@@ -56,11 +77,18 @@ class BulkTopBind:
         if hasattr(self.ui, 'btn_immune'):
             self.ui.btn_immune.clicked.connect(self.show_immune_dialog)
 
+        if hasattr(self.ui, 'btn_gdsc_drug_sensitivity'):
+            self.ui.btn_gdsc_drug_sensitivity.clicked.connect(self.go_to_bulk_gdsc_drug_sensitivity)
+
     def show_immune_dialog(self):
         """显示bulk免疫分析弹窗"""
         from script.analyzer_layer.bulk_layer.immune_top_layer.immune_dialog import ImmuneDialog
         dialog = ImmuneDialog(self.parent)
         dialog.exec_()
+
+    def go_to_bulk_gdsc_drug_sensitivity(self):
+        """跳转到bulk GDSC药物敏感性分析页面"""
+        page_intersect.go_to_page_with_bind('bulk_gdsc_drug_sensitivity_page')
 
     def bind_data_loading(self):
         """绑定数据加载相关控件"""

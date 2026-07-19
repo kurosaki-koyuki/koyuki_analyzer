@@ -91,6 +91,73 @@ def create_styled_button(text, font_size=14, parent=None, bold=True, variant='su
     
     return btn
 
+def create_styled_image_button(text, image_path, parent=None, font_size=12, bold=True, variant='sub'):
+    s = get_mod_styles()
+    
+    btn = QPushButton(parent)
+    btn.setFont(get_unified_font(font_size, bold))
+    
+    layout = QVBoxLayout(btn)
+    layout.setContentsMargins(8, 8, 8, 8)
+    layout.setSpacing(5)
+    
+    text_label = QLabel(text)
+    text_label.setFont(get_unified_font(font_size, bold))
+    text_label.setAlignment(Qt.AlignCenter)
+    text_label.setStyleSheet(f"color: {s.get(f'{variant}_button_text', '#87CEEB')}; background: transparent;")
+    text_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+    layout.addWidget(text_label, alignment=Qt.AlignCenter)
+    
+    if os.path.exists(image_path):
+        pixmap = QPixmap(image_path)
+        if not pixmap.isNull():
+            size = min(pixmap.width(), pixmap.height())
+            square_pixmap = pixmap.copy(
+                (pixmap.width() - size) // 2,
+                (pixmap.height() - size) // 2,
+                size,
+                size
+            )
+            scaled_pixmap = square_pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            image_label = QLabel()
+            image_label.setPixmap(scaled_pixmap)
+            image_label.setAlignment(Qt.AlignCenter)
+            image_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            layout.addWidget(image_label, alignment=Qt.AlignCenter)
+    else:
+        placeholder_label = QLabel("图片加载失败")
+        placeholder_label.setFont(get_unified_font(10))
+        placeholder_label.setStyleSheet(f"color: {s.get('error_color', '#FF6B6B')}; background: transparent;")
+        placeholder_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(placeholder_label, alignment=Qt.AlignCenter)
+    
+    btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    btn.setMinimumSize(320, 340)
+    
+    button_bg = s.get(f'{variant}_button_bg', 'rgba(30, 58, 95, 0.3)')
+    button_border = s.get(f'{variant}_button_border', '#1E3A5F')
+    button_hover_bg = s.get(f'{variant}_button_hover_bg', 'rgba(30, 58, 95, 0.5)')
+    button_pressed_bg = s.get(f'{variant}_button_pressed_bg', 'rgba(135, 206, 235, 0.4)')
+    button_radius = s.get(f'{variant}_button_radius', '5px')
+    
+    btn.setStyleSheet(f"""
+        QPushButton {{
+            background: {button_bg};
+            border: 2px solid {button_border};
+            border-radius: {button_radius};
+        }}
+        QPushButton:hover {{
+            background: {button_hover_bg};
+        }}
+        QPushButton:pressed {{
+            background: {button_pressed_bg};
+        }}
+    """)
+    
+    btn.adjustSize()
+    
+    return btn
+
 def create_styled_combo_box(parent=None, fixed_height=None, variant='sub'):
     """创建样式化的下拉框"""
     s = get_mod_styles()
@@ -491,6 +558,113 @@ def create_styled_list_widget(parent=None, fixed_height=None, multi_selection=Fa
     
     return list_widget
 
+class NonEditableTable(QTableWidget):
+    """不可编辑表格类 - 表头点击一次选中整列，点击两次切换排序"""
+    
+    def __init__(self, parent=None, variant='sub'):
+        super().__init__(parent)
+        self._last_clicked_column = -1
+        self._click_count = 0
+        self._variant = variant
+        
+        s = get_mod_styles()
+        table_border = s.get(f'{variant}_border_color', '#1E3A5F')
+        table_text = s.get(f'{variant}_text_color', '#87CEEB')
+        table_selection = s.get(f'{variant}_active_color',
+                                s.get(f'{variant}_fill_alt', 'rgba(135, 206, 235, 0.3)'))
+        table_header_bg = s.get(f'{variant}_fill_alt',
+                                s.get(f'{variant}_fill_color', 'rgba(30, 58, 95, 0.8)'))
+        table_hover = s.get(f'{variant}_hover_color',
+                            s.get(f'{variant}_fill_alt', 'rgba(30, 58, 95, 0.4)'))
+
+        self.setFont(get_font_for_widget('label', 9))
+
+        self.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid {table_border};
+                gridline-color: {table_border};
+            }}
+            QTableWidget::item {{
+                padding: 3px;
+            }}
+            QTableWidget::item:selected {{
+                background: {table_selection};
+            }}
+            QTableWidget::item:hover {{
+                background: {table_hover};
+            }}
+            QHeaderView::section {{
+                color: {table_text};
+                background: {table_header_bg};
+                border: 1px solid {table_border};
+                padding: 5px;
+                font-weight: bold;
+            }}
+        """)
+
+        self.setAlternatingRowColors(False)
+        self.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.horizontalHeader().setStretchLastSection(True)
+        self.verticalHeader().setVisible(False)
+        self.setSortingEnabled(False)
+        
+        self.horizontalHeader().sectionClicked.connect(self._on_header_click)
+    
+    def _on_header_click(self, logical_index):
+        if logical_index == self._last_clicked_column:
+            self._click_count += 1
+            if self._click_count >= 2:
+                self._click_count = 0
+                self._sort_column(logical_index)
+        else:
+            self._last_clicked_column = logical_index
+            self._click_count = 1
+            self.selectColumn(logical_index)
+    
+    def _sort_column(self, column):
+        current_sort_order = self.horizontalHeader().sortIndicatorOrder()
+        new_order = Qt.AscendingOrder if current_sort_order == Qt.DescendingOrder else Qt.DescendingOrder
+        self.sortByColumn(column, new_order)
+    
+    def setItem(self, row, column, item):
+        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+        super().setItem(row, column, item)
+    
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_C and (event.modifiers() & Qt.ControlModifier):
+            self._copy_selected_cells()
+            return
+        super().keyPressEvent(event)
+    
+    def _copy_selected_cells(self):
+        selected_ranges = self.selectedRanges()
+        if not selected_ranges:
+            return
+        
+        rows = set()
+        cols = set()
+        for r in selected_ranges:
+            for row in range(r.topRow(), r.bottomRow() + 1):
+                rows.add(row)
+            for col in range(r.leftColumn(), r.rightColumn() + 1):
+                cols.add(col)
+        
+        rows = sorted(rows)
+        cols = sorted(cols)
+        
+        clipboard_text = []
+        for row in rows:
+            row_text = []
+            for col in cols:
+                item = self.item(row, col)
+                row_text.append(str(item.text()) if item else '')
+            clipboard_text.append('\t'.join(row_text))
+        
+        clipboard = QApplication.clipboard()
+        clipboard.setText('\n'.join(clipboard_text))
+
+
 def create_styled_table(parent=None, variant='sub'):
     """创建样式化的表格控件
     
@@ -498,56 +672,10 @@ def create_styled_table(parent=None, variant='sub'):
     交替行和字体色由调用方在填充数据时显式设置，避免 Qt 样式表
     的 alternate-background-color 与半透明色混合导致亮度异常，
     同时避免 setForeground 与样式表 color 属性冲突导致字体变黑。
+    
+    修改：表格内容不可编辑，表头点击一次选中整列，点击两次切换排序。
     """
-    s = get_mod_styles()
-    table = QTableWidget(parent)
-
-    table_border = s.get(f'{variant}_border_color', '#1E3A5F')
-    table_text = s.get(f'{variant}_text_color', '#87CEEB')
-    table_selection = s.get(f'{variant}_active_color',
-                            s.get(f'{variant}_fill_alt', 'rgba(135, 206, 235, 0.3)'))
-    table_header_bg = s.get(f'{variant}_fill_alt',
-                            s.get(f'{variant}_fill_color', 'rgba(30, 58, 95, 0.8)'))
-    table_hover = s.get(f'{variant}_hover_color',
-                        s.get(f'{variant}_fill_alt', 'rgba(30, 58, 95, 0.4)'))
-
-    table.setFont(get_font_for_widget('label', 9))
-
-    # 样式表不设置 item 默认背景/颜色，完全交给 bind 层控制
-    table.setStyleSheet(f"""
-        QTableWidget {{
-            border: 1px solid {table_border};
-            gridline-color: {table_border};
-        }}
-        QTableWidget::item {{
-            padding: 3px;
-        }}
-        QTableWidget::item:selected {{
-            background: {table_selection};
-        }}
-        QTableWidget::item:hover {{
-            background: {table_hover};
-        }}
-        QHeaderView::section {{
-            color: {table_text};
-            background: {table_header_bg};
-            border: 1px solid {table_border};
-            padding: 5px;
-            font-weight: bold;
-        }}
-    """)
-
-    # 禁用 Qt 内置交替行，由 bind 层显式控制
-    table.setAlternatingRowColors(False)
-
-    # 只选中单个单元格
-    table.setSelectionBehavior(QAbstractItemView.SelectItems)
-    table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-    table.horizontalHeader().setStretchLastSection(True)
-    table.verticalHeader().setVisible(False)
-    table.setSortingEnabled(True)
-
-    return table
+    return NonEditableTable(parent, variant)
 
 
 class EditableInputTable(QTableWidget):
@@ -1872,6 +2000,244 @@ def create_zoomable_image_label(parent=None, fixed_height=None):
     return label
 
 
+# 模块级变量：缓存Shiny JS拦截器和HTTP服务器实例（避免被垃圾回收导致失效）
+_shiny_js_interceptor = None
+_shiny_js_http_server = None
+# 本地HTTP服务器端口和URL，用于提供修复版shiny.min.js
+SHINY_JS_HTTP_PORT = 8788
+SHINY_JS_HTTP_URL = f"http://localhost:{SHINY_JS_HTTP_PORT}/shiny.min.js"
+
+
+def _get_shiny_js_interceptor():
+    """获取或创建Shiny JS拦截器+本地HTTP服务器（单例）
+    启动本地HTTP服务器(端口8788)提供修复版shiny.min.js（ES5兼容，含CORS头）
+    拦截器重定向Shiny的shiny.min.js请求到本地HTTP服务器
+    解决PyQt5 5.15.11 / Chromium 83不支持ES2021逻辑赋值运算符(??= ||= &&=)的问题
+    """
+    global _shiny_js_interceptor, _shiny_js_http_server
+    if _shiny_js_interceptor is not None:
+        return _shiny_js_interceptor
+
+    try:
+        from PyQt5.QtWebEngineCore import QWebEngineUrlRequestInterceptor
+        from PyQt5.QtCore import QUrl
+        import http.server
+        import socketserver
+        import threading
+
+        # 修复版shiny.min.js路径：appdata/shiny_fixed/shiny.min.js
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        fixed_js_path = os.path.join(project_root, "appdata", "shiny_fixed", "shiny.min.js")
+
+        if not os.path.exists(fixed_js_path):
+            print(f"[WebTab] 修复版shiny.min.js不存在: {fixed_js_path}，跳过拦截器创建")
+            return None
+
+        # 读取修复版内容到内存（避免每次请求都读文件）
+        with open(fixed_js_path, 'rb') as f:
+            fixed_js_content = f.read()
+        print(f"[WebTab] 修复版shiny.min.js已加载到内存: {len(fixed_js_content)} 字节")
+
+        # HTTP请求处理器：返回修复版shiny.min.js（含CORS头，允许跨域访问）
+        class ShinyJsHTTPHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == '/shiny.min.js':
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/javascript')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Cache-Control', 'no-cache')
+                    self.end_headers()
+                    self.wfile.write(fixed_js_content)
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def log_message(self, format, *args):
+                pass  # 静默HTTP日志，避免污染控制台
+
+        # 启动本地HTTP服务器（daemon线程，程序退出时自动关闭）
+        try:
+            _shiny_js_http_server = socketserver.TCPServer(
+                ('localhost', SHINY_JS_HTTP_PORT), ShinyJsHTTPHandler
+            )
+            http_thread = threading.Thread(
+                target=_shiny_js_http_server.serve_forever, daemon=True
+            )
+            http_thread.start()
+            print(f"[WebTab] Shiny JS本地HTTP服务器已启动: {SHINY_JS_HTTP_URL}")
+        except Exception as e:
+            print(f"[WebTab] 启动Shiny JS HTTP服务器失败: {e}（端口{SHINY_JS_HTTP_PORT}可能被占用）")
+            return None
+
+        class ShinyJsInterceptor(QWebEngineUrlRequestInterceptor):
+            """拦截shiny.min.js请求，重定向到本地HTTP服务器"""
+            def interceptRequest(self, info):
+                try:
+                    url = info.requestUrl().toString()
+                    # 拦截Shiny的shiny.min.js请求（路径包含shiny-javascript-xxx/shiny.min.js）
+                    if 'shiny-javascript' in url and 'shiny.min.js' in url:
+                        fixed_url = QUrl(SHINY_JS_HTTP_URL)
+                        info.redirect(fixed_url)
+                        print(f"[WebTab] 已重定向shiny.min.js到本地HTTP: {SHINY_JS_HTTP_URL}")
+                except Exception as e:
+                    print(f"[WebTab] 拦截shiny.min.js失败: {e}")
+
+        _shiny_js_interceptor = ShinyJsInterceptor()
+        print(f"[WebTab] Shiny JS拦截器已创建")
+        return _shiny_js_interceptor
+    except Exception as e:
+        print(f"[WebTab] 创建Shiny JS拦截器失败: {e}")
+        return None
+
+
+def create_styled_web_tab(tab_widget, title, parent=None, default_html=None):
+    """
+    创建带QWebEngineView的样式化标签页（模板函数）
+
+    用于在标签页中嵌入网页内容（如Shiny网页），统一所有网页标签页的创建逻辑。
+
+    Args:
+        tab_widget: QTabWidget实例
+        title: 标签页标题
+        parent: 父控件
+        default_html: 默认显示的HTML内容（未加载网页时）。若为None则使用默认提示页
+
+    Returns:
+        (tab_page, web_view): 标签页容器和QWebEngineView实例；若QtWebEngineWidgets不可用，web_view为None
+    """
+    s = get_mod_styles()
+    bg_color = s.get('sub_fill_color', 'rgba(26, 26, 46, 1)')
+    text_color = s.get('sub_text_primary', '#87CEEB')
+    accent_color = s.get('sub_mutant_color', '#E91E63')
+
+    try:
+        from PyQt5.QtWebEngineWidgets import QWebEngineView
+    except ImportError:
+        tab_page = QWidget(parent if parent else tab_widget)
+        layout = QVBoxLayout(tab_page)
+        layout.setContentsMargins(5, 5, 5, 5)
+        label = QLabel("QtWebEngineWidgets未安装，无法显示网页内容", tab_page)
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet(f"color: {text_color}; background: {bg_color};")
+        layout.addWidget(label)
+        tab_widget.addTab(tab_page, title)
+        return tab_page, None
+
+    if parent is None and tab_widget:
+        parent = tab_widget
+    tab_page = QWidget(parent)
+    layout = QVBoxLayout(tab_page)
+    layout.setContentsMargins(5, 5, 5, 5)
+    layout.setSpacing(0)
+
+    web_view = QWebEngineView(tab_page)
+    web_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    web_view.setObjectName("styled_web_view")
+
+    # 创建自定义QWebEnginePage捕获JS错误
+    try:
+        from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineSettings
+        from PyQt5.QtCore import pyqtSlot
+
+        class DebugWebEnginePage(QWebEnginePage):
+            """自定义QWebEnginePage，捕获JS控制台消息和错误"""
+            def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+                level_str = {0: "Info", 1: "Warning", 2: "Error"}.get(level, "Unknown")
+                print(f"[WebEngine JS {level_str}] {message} (line {lineNumber}, source: {sourceID})")
+
+        debug_page = DebugWebEnginePage(web_view)
+        web_view.setPage(debug_page)
+
+        settings = debug_page.settings()
+        # 启用JavaScript（默认启用，但显式设置以确保）
+        settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+        # 启用本地内容访问
+        settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.LocalContentCanAccessFileUrls, True)
+        # 启用插件
+        settings.setAttribute(QWebEngineSettings.PluginsEnabled, True)
+        # 启用自动加载图片
+        settings.setAttribute(QWebEngineSettings.AutoLoadImages, True)
+        # 启用ErrorPage
+        settings.setAttribute(QWebEngineSettings.ErrorPageEnabled, True)
+        # 启用滚动条
+        settings.setAttribute(QWebEngineSettings.ScrollAnimatorEnabled, True)
+        # 启用WebGL（某些可视化可能需要）
+        settings.setAttribute(QWebEngineSettings.WebGLEnabled, True)
+        # 启用本地存储
+        settings.setAttribute(QWebEngineSettings.LocalStorageEnabled, True)
+
+        # 注册Shiny JS拦截器：把shiny.min.js重定向到本地HTTP服务器(端口8788)
+        # 本地HTTP服务器由_get_shiny_js_interceptor()单例启动，提供ES5兼容修复版
+        interceptor = _get_shiny_js_interceptor()
+        if interceptor is not None:
+            profile = debug_page.profile()
+            profile.setUrlRequestInterceptor(interceptor)
+    except Exception as e:
+        print(f"[WebTab] 配置QWebEngineSettings失败: {e}")
+
+    if default_html is None:
+        default_html = f"""
+        <html>
+        <head><meta charset="utf-8"><style>
+            body {{
+                background: {bg_color};
+                color: {text_color};
+                font-family: Arial, 'Microsoft YaHei', sans-serif;
+                margin: 0;
+                padding: 40px;
+                text-align: center;
+            }}
+            .container {{
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 30px;
+                background: rgba(255,255,255,0.05);
+                border: 1px solid {accent_color};
+                border-radius: 8px;
+            }}
+            h2 {{
+                color: {accent_color};
+                margin-bottom: 20px;
+            }}
+            p {{
+                line-height: 1.8;
+                font-size: 14px;
+                text-align: left;
+            }}
+            .note {{
+                margin-top: 20px;
+                padding: 10px;
+                background: rgba(255,255,255,0.08);
+                border-left: 3px solid {accent_color};
+                text-align: left;
+            }}
+        </style></head>
+        <body>
+            <div class="container">
+                <h2>节点选择标签页（Shiny网页）</h2>
+                <p>此标签页用于在<b>手动模式</b>下显示Shiny网页，供您手动选择轨迹根节点。</p>
+                <p><b>使用步骤：</b></p>
+                <p>1. 将左侧「节点选择模式」下拉框切换为 <b>manual</b></p>
+                <p>2. 点击「计算伪时间」按钮</p>
+                <p>3. Shiny网页将自动加载到此标签页</p>
+                <p>4. 在网页中点击选择根节点，然后点击确认按钮</p>
+                <div class="note">
+                    <b>提示：</b>自动模式（auto）下此标签页不会加载内容，系统会自动选择度数最高的节点作为根节点。
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+    web_view.setHtml(default_html)
+
+    layout.addWidget(web_view)
+    tab_widget.addTab(tab_page, title)
+
+    return tab_page, web_view
+
+
 def create_styled_image_tab(tab_widget, title, parent=None, default_text="请加载数据并生成图表", data_hint_template="数据: {dataset_name}\n样本数: {n_samples}\n基因数: {n_genes}\n\n请输入基因名称并点击「生成结果图」"):
     """
     创建带图片显示的样式化标签页（模板函数）
@@ -1922,6 +2288,7 @@ __all__ = [
     'get_mod_paths',
     'create_styled_label',
     'create_styled_button',
+    'create_styled_image_button',
     'create_styled_combo_box',
     'create_styled_line_edit',
     'create_styled_slider',
@@ -1935,6 +2302,7 @@ __all__ = [
     'create_styled_tab_widget',
     'create_styled_tab_page',
     'create_styled_image_tab',
+    'create_styled_web_tab',
     'create_zoomable_image_label',
     'get_stylesheet_for_widget',
     'get_font_for_widget',
@@ -1946,6 +2314,7 @@ __all__ = [
     'QuestionsButton',
     'create_questions_button',
     'create_labeled_param_with_help',
+    'TableSearcherMixin',
 ]
 
 
@@ -2248,3 +2617,280 @@ class StyledDialog(QDialog):
     def closeEvent(self, event):
         """关闭事件"""
         super().closeEvent(event)
+
+
+# ========================================
+# 导航栏控件
+# ========================================
+
+def create_navigation_panel(parent=None, fixed_width=220, variant='sub'):
+    """创建导航栏容器面板
+    
+    Args:
+        parent: 父控件
+        fixed_width: 固定宽度，默认220px
+        variant: 样式变体
+    
+    Returns:
+        tuple: (panel, layout) 面板控件和布局
+    """
+    s = get_mod_styles()
+    panel = QWidget(parent)
+    panel.setFixedWidth(fixed_width)
+    
+    nav_bg = s.get(f'{variant}_nav_bg', s.get(f'{variant}_fill_color', 'rgba(26, 26, 46, 0.9)'))
+    nav_border = s.get(f'{variant}_nav_border', s.get(f'{variant}_border_color', '#1E3A5F'))
+    
+    panel.setStyleSheet(f"""
+        QWidget {{
+            background: {nav_bg};
+            border-right: 1px solid {nav_border};
+        }}
+    """)
+    
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(8, 15, 8, 15)
+    layout.setSpacing(5)
+    
+    return panel, layout
+
+
+class TableSearcherMixin:
+    """基因搜索功能Mixin - 为表格标签页提供基因搜索能力
+
+    使用方法：
+    1. 功能层类继承此Mixin
+    2. 在布局层添加 gene_search_input（QLineEdit）和 gene_search_btn（QPushButton）
+    3. 调用 setup_gene_search 方法，传入标签页控件和表格列表
+    4. 绑定按钮点击信号到 search_gene 方法
+    """
+
+    def setup_gene_search(self, tab_widget, tables, gene_col=0):
+        """设置基因搜索
+
+        Args:
+            tab_widget: 标签页控件
+            tables: 表格列表，按标签页索引顺序排列
+            gene_col: 基因所在列索引，默认为0
+        """
+        self._gene_search_tab_widget = tab_widget
+        self._gene_search_tables = tables
+        self._gene_search_col = gene_col
+
+    def _get_current_search_table(self):
+        """获取当前激活标签页对应的表格"""
+        if not hasattr(self, '_gene_search_tables') or not self._gene_search_tables:
+            return None
+        if not hasattr(self, '_gene_search_tab_widget') or not self._gene_search_tab_widget:
+            return None
+        current_index = self._gene_search_tab_widget.currentIndex()
+        if 0 <= current_index < len(self._gene_search_tables):
+            return self._gene_search_tables[current_index]
+        return None
+
+    def search_gene(self):
+        """执行基因搜索 - 在当前激活的表格中搜索基因"""
+        ui = (getattr(self, 'bulk_diff_ui', None)
+              or getattr(self, 'diff_ui', None)
+              or getattr(self, 'r_diff_ui', None)
+              or getattr(self, 'bulk_cox_ui', None)
+              or getattr(self, 'bulk_logrank_ui', None))
+        if not ui:
+            return
+
+        if not hasattr(ui, 'gene_search_input'):
+            return
+
+        gene_name = ui.gene_search_input.text().strip()
+        if not gene_name:
+            if hasattr(self, 'alert_error'):
+                self.alert_error("请输入基因名称")
+            return
+
+        table = self._get_current_search_table()
+        if not table or table.rowCount() == 0:
+            if hasattr(self, 'alert_error'):
+                self.alert_error("当前表格无数据")
+            return
+
+        gene_col = getattr(self, '_gene_search_col', 0)
+        gene_name_lower = gene_name.lower()
+        found_row = -1
+
+        for row in range(table.rowCount()):
+            item = table.item(row, gene_col)
+            if item and item.text().lower() == gene_name_lower:
+                found_row = row
+                break
+
+        if found_row == -1:
+            for row in range(table.rowCount()):
+                item = table.item(row, gene_col)
+                if item and gene_name_lower in item.text().lower():
+                    found_row = row
+                    break
+
+        if found_row >= 0:
+            table.selectRow(found_row)
+            table.scrollToItem(table.item(found_row, gene_col), QAbstractItemView.PositionAtCenter)
+        else:
+            if hasattr(self, 'alert_error'):
+                self.alert_error(f"未找到基因: {gene_name}")
+
+
+def create_navigation_button(text, font_size=14, parent=None, variant='sub', icon=None):
+    """创建导航项按钮（标签式样式）
+    
+    选中时有背景高亮，扁平设计风格
+    
+    Args:
+        text: 按钮文字
+        font_size: 字体大小
+        parent: 父控件
+        variant: 样式变体
+        icon: 可选图标（QIcon）
+    
+    Returns:
+        QPushButton: 导航按钮
+    """
+    s = get_mod_styles()
+    btn = QPushButton(text, parent)
+    
+    btn.setFont(get_unified_font(font_size, bold=False))
+    btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    btn.setMinimumHeight(45)
+    btn.setFocusPolicy(Qt.NoFocus)
+    
+    if icon:
+        btn.setIcon(icon)
+        btn.setIconSize(QSize(20, 20))
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {s.get(f'{variant}_text_primary', '#87CEEB')};
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background: {s.get(f'{variant}_hover_color', 'rgba(30, 58, 95, 0.5)')};
+            }}
+            QPushButton:checked {{
+                background: {s.get(f'{variant}_active_color', 'rgba(135, 206, 235, 0.2)')};
+                color: {s.get(f'{variant}_mutant_color', '#FF6B35')};
+            }}
+        """)
+    else:
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {s.get(f'{variant}_text_primary', '#87CEEB')};
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background: {s.get(f'{variant}_hover_color', 'rgba(30, 58, 95, 0.5)')};
+            }}
+            QPushButton:checked {{
+                background: {s.get(f'{variant}_active_color', 'rgba(135, 206, 235, 0.2)')};
+                color: {s.get(f'{variant}_mutant_color', '#FF6B35')};
+            }}
+        """)
+    
+    btn.setCheckable(True)
+    
+    return btn
+
+
+def create_navigation_divider(parent=None, variant='sub'):
+    """创建导航栏分隔线
+    
+    Args:
+        parent: 父控件
+        variant: 样式变体
+    
+    Returns:
+        QFrame: 分隔线控件
+    """
+    s = get_mod_styles()
+    divider = QFrame(parent)
+    divider.setFrameShape(QFrame.HLine)
+    divider.setFrameShadow(QFrame.Sunken)
+    
+    divider.setStyleSheet(f"""
+        QFrame {{
+            color: {s.get(f'{variant}_border_color', '#1E3A5F')};
+            background: {s.get(f'{variant}_border_color', '#1E3A5F')};
+            height: 1px;
+        }}
+    """)
+    
+    return divider
+
+
+def create_navigation_header(text, font_size=12, parent=None, variant='sub'):
+    """创建导航栏分组标题
+    
+    Args:
+        text: 标题文字
+        font_size: 字体大小
+        parent: 父控件
+        variant: 样式变体
+    
+    Returns:
+        QLabel: 标题标签
+    """
+    s = get_mod_styles()
+    label = QLabel(text, parent)
+    label.setFont(get_unified_font(font_size, bold=True))
+    label.setStyleSheet(f"""
+        QLabel {{
+            color: {s.get(f'{variant}_text_color', '#87CEEB')};
+            background: transparent;
+            padding: 8px 8px 4px;
+            opacity: 0.7;
+        }}
+    """)
+    
+    return label
+
+
+__all__ = [
+    'get_mod_styles',
+    'get_mod_paths',
+    'create_styled_label',
+    'create_styled_button',
+    'create_styled_image_button',
+    'create_styled_combo_box',
+    'create_styled_line_edit',
+    'create_styled_slider',
+    'create_styled_checkbox',
+    'create_styled_spinbox',
+    'create_styled_number_input',
+    'create_styled_list_widget',
+    'create_styled_table',
+    'create_styled_panel',
+    'create_styled_group_box',
+    'create_styled_tab_widget',
+    'create_styled_tab_page',
+    'create_styled_image_tab',
+    'create_styled_web_tab',
+    'create_zoomable_image_label',
+    'get_stylesheet_for_widget',
+    'get_font_for_widget',
+    'get_main_gui_styles',
+    'get_sub_gui_styles',
+    'bind_button_with_sound',
+    'ZoomableImageLabel',
+    'StyledNumberInput',
+    'QuestionsButton',
+    'create_questions_button',
+    'create_labeled_param_with_help',
+    'create_navigation_panel',
+    'create_navigation_button',
+    'create_navigation_divider',
+    'create_navigation_header',
+]
