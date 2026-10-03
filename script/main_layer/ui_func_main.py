@@ -1,0 +1,246 @@
+# -*- coding: utf-8 -*-
+"""
+主界面前端功能类 - 纯前端显示操作
+负责主界面所有UI控件的显示更新、样式应用、图标同步等
+"""
+
+from script.utils_layer.import_config import *
+from script.mods_layer.mod_manager import global_mod_manager
+from script.mods_layer.emoji_function_for_mods import happy
+from script.utils_layer.music_controller_fix import (
+    sync_all_volume_sliders,
+    sync_all_music_buttons
+)
+from script.utils_layer.gui_styles import get_main_gui_styles
+
+
+class MainFunc:
+    """主界面前端功能类 - 纯前端显示操作"""
+
+    def __init__(self, main_ui):
+        self.main_ui = main_ui
+
+    # ---------- 模组样式应用 ----------
+
+    def apply_mod_styles(self):
+        """应用当前模组样式到主界面所有控件（纯显示，不处理音乐业务）"""
+        new_styles = global_mod_manager.get_current_styles()
+        main_styles = get_main_gui_styles()
+
+        # 解构主界面样式
+        primary_color = main_styles['primary_color']
+        title_font = main_styles['title_font']
+        label_font = main_styles['label_font']
+        button_font = main_styles['button_font']
+        button_stylesheet = main_styles['button_stylesheet']
+        combo_stylesheet = main_styles['combo_stylesheet']
+        slider_stylesheet = main_styles['slider_stylesheet']
+        music_btn_stylesheet = main_styles['music_btn_stylesheet']
+
+        self._update_window_title(new_styles.get('window_title', "小雪生信工具箱"))
+        self._update_title_label(new_styles, primary_color, title_font)
+        self._update_subtitle_labels(new_styles, label_font, primary_color)
+        self._update_mod_controls(combo_stylesheet, new_styles, primary_color)
+        self._update_music_controls_style(music_btn_stylesheet, slider_stylesheet)
+        self._update_all_buttons(new_styles, button_font, button_stylesheet)
+        self._update_donate_button(new_styles)
+        self._update_auxiliary_controls(new_styles)
+
+    def _update_window_title(self, title):
+        """更新窗口标题"""
+        self.main_ui.setWindowTitle(title)
+
+    def _update_title_label(self, styles, primary_color, title_font):
+        """更新主标题标签（字体固定不随mod变化，只更新文字/颜色/位置）"""
+        if not hasattr(self.main_ui, 'title_label'):
+            return
+        label = self.main_ui.title_label
+        label.setText(styles.get('main_title', "生信工具一览"))
+        label.setStyleSheet(f"color: {primary_color}; background: transparent;")
+        base_w = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        base_h = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
+        label.setGeometry(
+            int(base_w * styles.get('title_x', 0.65)),
+            int(base_h * styles.get('title_y', 0.18)),
+            int(base_w * styles.get('title_width', 0.3)),
+            styles.get('title_height', 50)
+        )
+
+    def _update_subtitle_labels(self, styles, label_font, primary_color):
+        """更新副标题标签（字体固定不随mod变化，只更新文字/颜色/位置）"""
+        subtitle_color = styles.get('subtitle_color', primary_color)
+        subtitle_background = styles.get('subtitle_background', 'transparent')
+        base_w = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        base_h = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
+
+        subtitle_configs = [
+            ('spatial_title_label', 'spatial_title', "空转分析",
+             'spatial_title_x', 'spatial_title_y', 'spatial_title_width', 'spatial_title_height'),
+            ('left_title_label', 'single_cell_title', "单细胞分析",
+             'left_title_x', 'left_title_y', 'left_title_width', 'left_title_height'),
+            ('right_title_label', 'bulk_title', "bulk分析",
+             'right_title_x', 'right_title_y', 'right_title_width', 'right_title_height'),
+            ('tools_title_label', 'tools_title', "通用小工具",
+             'tools_title_x', 'tools_title_y', 'tools_title_width', 'tools_title_height'),
+        ]
+
+        for attr, text_key, default_text, x_key, y_key, w_key, h_key in subtitle_configs:
+            if not hasattr(self.main_ui, attr):
+                continue
+            label = getattr(self.main_ui, attr)
+            label.setText(styles.get(text_key, default_text))
+            label.setStyleSheet(f"color: {subtitle_color}; background: {subtitle_background};")
+            label.setGeometry(
+                int(base_w * styles.get(x_key,
+                    (styles.get('left_title_x', 0.68) - 0.10) if 'spatial' in attr
+                    else 0.68 if 'left' in attr
+                    else 0.78 if 'right' in attr
+                    else 0.88)),
+                int(base_h * styles.get(y_key, 0.28)),
+                styles.get(w_key, 180),
+                styles.get(h_key, 30)
+            )
+
+    def _update_mod_controls(self, combo_stylesheet, styles, primary_color):
+        """更新模组选择控件样式"""
+        if hasattr(self.main_ui, 'mod_combo'):
+            self.main_ui.mod_combo.setStyleSheet(combo_stylesheet)
+
+        if hasattr(self.main_ui, 'mod_label'):
+            mod_label_color = styles.get('mod_label_color', primary_color)
+            mod_label_bg = styles.get('mod_label_background', 'transparent')
+            self.main_ui.mod_label.setStyleSheet(f"color: {mod_label_color}; background: {mod_label_bg};")
+
+    def _update_music_controls_style(self, music_btn_stylesheet, slider_stylesheet):
+        """更新音乐控件样式"""
+        if hasattr(self.main_ui, 'music_btn'):
+            self.main_ui.music_btn.setStyleSheet(music_btn_stylesheet)
+
+        if hasattr(self.main_ui, 'volume_slider'):
+            self.main_ui.volume_slider.setStyleSheet(slider_stylesheet)
+
+    def _update_all_buttons(self, styles, button_font, button_stylesheet):
+        """批量更新所有功能按钮的样式（字体固定不随mod变化，只更新颜色/位置）"""
+        buttons = [
+            'btn_spatial_main', 'btn_single_cell_main', 'btn_bulk_main', 'btn_commontools'
+        ]
+
+        for btn_name in buttons:
+            if not hasattr(self.main_ui, btn_name):
+                continue
+            btn = getattr(self.main_ui, btn_name)
+            btn.setStyleSheet(button_stylesheet)
+
+        if hasattr(self.main_ui, 'update_button_positions'):
+            self.main_ui.update_button_positions(styles)
+
+    def _update_donate_button(self, styles):
+        """更新打赏按钮位置"""
+        if not hasattr(self.main_ui, 'btn_donate'):
+            return
+        base_w = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        base_h = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
+        self.main_ui.btn_donate.move(
+            int(base_w * styles.get('donate_button_x', 0.725)),
+            int(base_h * styles.get('donate_button_y', 0.80))
+        )
+
+    def _update_auxiliary_controls(self, styles):
+        """刷新主界面其余主题控件的颜色（设置按钮 / 打赏按钮 / 主页背景）"""
+        main_ui = self.main_ui
+        fill_color = styles.get('main_fill_color', 'rgba(30, 58, 95, 0.3)')
+        border_color = styles.get('main_border_color', '#1E3A5F')
+        fill_alt = styles.get('main_fill_alt', 'rgba(30, 58, 95, 0.5)')
+        button_radius = styles.get('button_border_radius', '5px')
+        mutant_color = styles.get('main_mutant_color', styles.get('mutant_color', '#FF6B35'))
+
+        # 右侧设置图标按钮
+        if hasattr(main_ui, 'settings_btn'):
+            main_ui.settings_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {fill_color};
+                    border: 1px solid {border_color};
+                    border-radius: {button_radius};
+                }}
+                QPushButton:hover {{
+                    background-color: {fill_alt};
+                }}
+            """)
+
+        # 打赏按钮（变异色）
+        if hasattr(main_ui, 'btn_donate'):
+            main_ui.btn_donate.setStyleSheet(f"""
+                QPushButton {{
+                    color: white;
+                    background: {mutant_color};
+                    border: 3px solid {mutant_color};
+                    border-radius: {button_radius};
+                    min-width: 150px;
+                    min-height: 40px;
+                }}
+                QPushButton:hover {{
+                    background: {styles.get('main_hover_color', '#D62839')};
+                }}
+            """)
+
+        # 主页背景（无视频时兜底底色）
+        if hasattr(main_ui, 'video_bg_label'):
+            main_ui.video_bg_label.setStyleSheet(
+                f"background-color: {styles.get('main_fill_color', '#1a1a2e')};"
+            )
+
+    # ---------- 视频背景 ----------
+
+    def reload_video_background(self):
+        """重新加载并播放视频背景（纯显示）"""
+        if not hasattr(self.main_ui, 'video_bg'):
+            return
+
+        self.main_ui.video_bg.stop()
+        new_paths = global_mod_manager.get_current_paths()
+        VideoBackgroundClass = global_mod_manager.get_current_mod().get_video_background_class()
+        
+        bg_width = getattr(self.main_ui, 'base_width', self.main_ui.screen_width)
+        bg_height = getattr(self.main_ui, 'base_height', self.main_ui.screen_height)
+        
+        self.main_ui.video_bg = VideoBackgroundClass(
+            self.main_ui.home_page,
+            bg_width,
+            bg_height,
+            startup_video=new_paths['STARTUP_VIDEO'],
+            return_video=new_paths['STARTUP_RETURN_VIDEO'],
+            remain_video=new_paths['STARTREMAIN_VIDEO']
+        )
+        self.main_ui.video_bg.set_label(self.main_ui.video_bg_label)
+        self.main_ui.video_bg.play()
+
+    # ---------- 子界面样式 ----------
+
+    def update_subpage_styles(self):
+        """更新所有子界面的样式和背景 - 自动检测所有以_ui结尾的属性"""
+        for attr_name in dir(self.main_ui):
+            if attr_name.endswith('_ui'):
+                ui = getattr(self.main_ui, attr_name)
+                if hasattr(ui, 'update_background'):
+                    ui.update_background()
+                if hasattr(ui, 'update_styles'):
+                    ui.update_styles()
+
+    # ---------- 音乐控件显示 ----------
+
+    def update_music_icon(self, is_playing):
+        """更新音乐按钮图标（纯显示）"""
+        paths = global_mod_manager.get_current_paths()
+        sync_all_music_buttons(self.main_ui, is_playing, paths)
+
+    def sync_volume_sliders(self, value):
+        """同步所有音量滑块（纯显示）"""
+        sync_all_volume_sliders(self.main_ui, value)
+
+    # ---------- 通用弹窗 ----------
+
+    def show_donate_message(self):
+        """显示打赏弹窗（V50图片 + 强制播放V50音乐）"""
+        from script.main_layer.donate_dialog import DonateDialog
+        dialog = DonateDialog(self.main_ui)
+        dialog.exec_()
